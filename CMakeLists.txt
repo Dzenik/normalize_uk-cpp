@@ -22,6 +22,7 @@ endif()
 option(NORMALIZE_UK_CPP_BUILD_TOOLS "Build command-line tools" ON)
 option(NORMALIZE_UK_CPP_BUILD_TESTS "Build C++ tests" ${NORMALIZE_UK_CPP_DEFAULT_BUILD_TESTS})
 option(NORMALIZE_UK_CPP_BUILD_PYTHON "Build Python 3.10+ bindings" OFF)
+option(NORMALIZE_UK_CPP_BUILD_FUZZER "Build the libFuzzer normalization harness" OFF)
 option(NORMALIZE_UK_CPP_FETCH_CTRE "Fetch CTRE when it is not already available" ON)
 option(NORMALIZE_UK_CPP_FETCH_PYBIND11 "Fetch pybind11 when it is not already available" ON)
 
@@ -155,11 +156,34 @@ if(NORMALIZE_UK_CPP_BUILD_TESTS)
         set_tests_properties(uktextnorm_cli_uncertainty PROPERTIES
             PASS_REGULAR_EXPRESSION "invalid clock time"
         )
+        add_test(NAME uktextnorm_cli_colon_policy
+            COMMAND uktextnorm --colon-style ratio "10:30"
+        )
+        set_tests_properties(uktextnorm_cli_colon_policy PROPERTIES
+            PASS_REGULAR_EXPRESSION "десять до тридцяти"
+        )
+        add_test(NAME uktextnorm_cli_date_policy
+            COMMAND uktextnorm --date-order mdy "03/04/2026"
+        )
+        set_tests_properties(uktextnorm_cli_date_policy PROPERTIES
+            PASS_REGULAR_EXPRESSION "четверте березня"
+        )
     endif()
 endif()
 
 add_executable(uktextnorm_benchmark EXCLUDE_FROM_ALL benchmarks/uktextnorm_benchmark.cpp)
 target_link_libraries(uktextnorm_benchmark PRIVATE normalize_uk_cpp::normalize_uk_cpp)
+
+if(NORMALIZE_UK_CPP_BUILD_FUZZER)
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "NORMALIZE_UK_CPP_BUILD_FUZZER requires Clang")
+    endif()
+    target_compile_options(normalize_uk_cpp PRIVATE -fsanitize=fuzzer-no-link,address,undefined -fno-omit-frame-pointer)
+    add_executable(uktextnorm_fuzzer fuzz/uktextnorm_fuzzer.cpp)
+    target_link_libraries(uktextnorm_fuzzer PRIVATE normalize_uk_cpp::normalize_uk_cpp)
+    target_compile_options(uktextnorm_fuzzer PRIVATE -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer)
+    target_link_options(uktextnorm_fuzzer PRIVATE -fsanitize=fuzzer,address,undefined)
+endif()
 
 if(NORMALIZE_UK_CPP_BUILD_PYTHON)
     find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development.Module)

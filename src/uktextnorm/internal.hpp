@@ -137,6 +137,17 @@ bool valid_roman(std::string_view s);
 
 // Calendar validation.
 bool is_valid_date(int day, int month, int year);
+bool is_valid_iso_week(int year, int week);
+
+// Structured identifier validation.
+std::string compact_ascii_alnum_upper(std::string_view value);
+bool valid_isbn(std::string_view value);
+bool valid_issn(std::string_view value);
+bool valid_iban(std::string_view value);
+bool valid_luhn(std::string_view value);
+bool valid_vin_checksum(std::string_view value);
+bool valid_uuid_variant(std::string_view value);
+bool valid_hash_length(std::string_view algorithm, std::string_view value);
 
 // Identifier / finance / phone readers.
 std::string spell_identifier_letters(std::string_view letters);
@@ -154,7 +165,8 @@ std::string normalize_unicode(std::string text, QuoteStyle quote_style);
 std::string normalize_homoglyphs(std::string text);
 std::string normalize_typography(std::string text);
 std::string normalize_web(std::string text);
-std::string normalize_dates(std::string text, DateStyle style, bool validate, RangeStyle range_style);
+std::string normalize_dates(
+    std::string text, DateStyle style, bool validate, RangeStyle range_style, NumericDateOrder numeric_date_order);
 std::string normalize_discourse_dates(std::string text);
 std::string normalize_ordinals(std::string text);
 std::string normalize_quarters(std::string text);
@@ -170,7 +182,7 @@ std::string normalize_counted_noun_context(std::string text);
 std::string normalize_counted_nouns(std::string text);
 std::string normalize_ordinal_triggers(std::string text);
 std::string normalize_compounds(std::string text);
-std::string normalize_time(std::string text);
+std::string normalize_time(std::string text, ColonStyle colon_style);
 std::string normalize_fractions(std::string text);
 std::string normalize_percent(std::string text);
 std::string normalize_measurements(std::string text);

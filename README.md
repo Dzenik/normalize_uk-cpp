@@ -35,6 +35,34 @@ print([token.text for token in nuk.tokenize("П'ять зв'язків.")])
 
 More examples live in `examples/python/`.
 
+## Ambiguity controls
+
+`NormalizeOptions` keeps backward-compatible defaults while allowing callers to resolve ambiguous input explicitly:
+
+- `colon_style`: contextual clock/ratio detection, forced clock, or forced ratio.
+- `numeric_date_order`: day-month-year, month-day-year, or preservation of dates where both fields are at most 12.
+- `currency_symbol_policy`: assume the common currency for `$` and `¥`, or preserve those ambiguous symbols.
+
+The CLI exposes the same controls through `--colon-style`, `--date-order`, and
+`--preserve-ambiguous-currency`.
+
+## Benchmarks and fuzzing
+
+Build and run the benchmark explicitly:
+
+```sh
+cmake --build build --target uktextnorm_benchmark
+./build/uktextnorm_benchmark .
+```
+
+With Clang and libFuzzer support, build the normalization harness with sanitizers:
+
+```sh
+cmake -S . -B build-fuzz -DCMAKE_CXX_COMPILER=clang++ -DNORMALIZE_UK_CPP_BUILD_FUZZER=ON
+cmake --build build-fuzz --target uktextnorm_fuzzer
+./build-fuzz/uktextnorm_fuzzer -max_total_time=60 tests/data
+```
+
 ## Formatting
 
 The project includes a `.clang-format` file and a CMake formatting target. Install `clang-format`, then run:

@@ -22,6 +22,7 @@ class UncertaintyCategory(Enum):
     Fraction: UncertaintyCategory
     Network: UncertaintyCategory
     Scientific: UncertaintyCategory
+    Coordinate: UncertaintyCategory
 
 
 class UncertaintySeverity(Enum):
@@ -48,6 +49,23 @@ class SymbolStyle(Enum):
 class DateStyle(Enum):
     Formal: DateStyle
     Spoken: DateStyle
+
+
+class ColonStyle(Enum):
+    Contextual: ColonStyle
+    Clock: ColonStyle
+    Ratio: ColonStyle
+
+
+class NumericDateOrder(Enum):
+    DayMonthYear: NumericDateOrder
+    MonthDayYear: NumericDateOrder
+    PreserveAmbiguous: NumericDateOrder
+
+
+class CurrencySymbolPolicy(Enum):
+    AssumeCommon: CurrencySymbolPolicy
+    PreserveAmbiguous: CurrencySymbolPolicy
 
 
 class QuoteStyle(Enum):
@@ -90,6 +108,9 @@ class NormalizeOptions:
     phone_style: PhoneStyle
     symbol_style: SymbolStyle
     date_style: DateStyle
+    colon_style: ColonStyle
+    numeric_date_order: NumericDateOrder
+    currency_symbol_policy: CurrencySymbolPolicy
     repair_homoglyphs: bool
     validate_dates: bool
     parse_thousand_separators: bool

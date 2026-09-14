@@ -74,7 +74,8 @@ PYBIND11_MODULE(_normalize_uk, m)
         .value("Time", uktextnorm::UncertaintyCategory::Time)
         .value("Fraction", uktextnorm::UncertaintyCategory::Fraction)
         .value("Network", uktextnorm::UncertaintyCategory::Network)
-        .value("Scientific", uktextnorm::UncertaintyCategory::Scientific);
+        .value("Scientific", uktextnorm::UncertaintyCategory::Scientific)
+        .value("Coordinate", uktextnorm::UncertaintyCategory::Coordinate);
 
     py::enum_<uktextnorm::UncertaintySeverity>(m, "UncertaintySeverity")
         .value("Info", uktextnorm::UncertaintySeverity::Info)
@@ -96,6 +97,20 @@ PYBIND11_MODULE(_normalize_uk, m)
     py::enum_<uktextnorm::DateStyle>(m, "DateStyle")
         .value("Formal", uktextnorm::DateStyle::Formal)
         .value("Spoken", uktextnorm::DateStyle::Spoken);
+
+    py::enum_<uktextnorm::ColonStyle>(m, "ColonStyle")
+        .value("Contextual", uktextnorm::ColonStyle::Contextual)
+        .value("Clock", uktextnorm::ColonStyle::Clock)
+        .value("Ratio", uktextnorm::ColonStyle::Ratio);
+
+    py::enum_<uktextnorm::NumericDateOrder>(m, "NumericDateOrder")
+        .value("DayMonthYear", uktextnorm::NumericDateOrder::DayMonthYear)
+        .value("MonthDayYear", uktextnorm::NumericDateOrder::MonthDayYear)
+        .value("PreserveAmbiguous", uktextnorm::NumericDateOrder::PreserveAmbiguous);
+
+    py::enum_<uktextnorm::CurrencySymbolPolicy>(m, "CurrencySymbolPolicy")
+        .value("AssumeCommon", uktextnorm::CurrencySymbolPolicy::AssumeCommon)
+        .value("PreserveAmbiguous", uktextnorm::CurrencySymbolPolicy::PreserveAmbiguous);
 
     py::enum_<uktextnorm::QuoteStyle>(m, "QuoteStyle")
         .value("Keep", uktextnorm::QuoteStyle::Keep)
@@ -134,6 +149,9 @@ PYBIND11_MODULE(_normalize_uk, m)
         .def_readwrite("phone_style", &uktextnorm::NormalizeOptions::phone_style)
         .def_readwrite("symbol_style", &uktextnorm::NormalizeOptions::symbol_style)
         .def_readwrite("date_style", &uktextnorm::NormalizeOptions::date_style)
+        .def_readwrite("colon_style", &uktextnorm::NormalizeOptions::colon_style)
+        .def_readwrite("numeric_date_order", &uktextnorm::NormalizeOptions::numeric_date_order)
+        .def_readwrite("currency_symbol_policy", &uktextnorm::NormalizeOptions::currency_symbol_policy)
         .def_readwrite("repair_homoglyphs", &uktextnorm::NormalizeOptions::repair_homoglyphs)
         .def_readwrite("validate_dates", &uktextnorm::NormalizeOptions::validate_dates)
         .def_readwrite("parse_thousand_separators", &uktextnorm::NormalizeOptions::parse_thousand_separators)

@@ -26,6 +26,9 @@ void usage(std::ostream& out)
         << "  --phone-digits         Spell phone numbers digit by digit.\n"
         << "  --preserve-symbols     Preserve standalone math symbols.\n"
         << "  --spoken-dates         Use genitive spoken day forms for numeric dates.\n"
+        << "  --colon-style <style>  Resolve bare N:N as contextual, clock, or ratio.\n"
+        << "  --date-order <order>   Read local numeric dates as dmy, mdy, or preserve-ambiguous.\n"
+        << "  --preserve-ambiguous-currency  Keep ambiguous $ and ¥ symbols.\n"
         << "  --no-known-acronyms    Preserve known Ukrainian acronyms.\n"
         << "  --no-acronym-spelling  Preserve unknown all-caps acronyms.\n"
         << "  --no-english           Preserve known English brand/product words.\n"
@@ -93,6 +96,8 @@ std::string_view category_name(uktextnorm::UncertaintyCategory category)
         return "Network";
     case uktextnorm::UncertaintyCategory::Scientific:
         return "Scientific";
+    case uktextnorm::UncertaintyCategory::Coordinate:
+        return "Coordinate";
     }
     return "Unknown";
 }
@@ -116,7 +121,8 @@ const std::vector<uktextnorm::UncertaintyCategory>& all_categories()
         uktextnorm::UncertaintyCategory::Time,
         uktextnorm::UncertaintyCategory::Fraction,
         uktextnorm::UncertaintyCategory::Network,
-        uktextnorm::UncertaintyCategory::Scientific};
+        uktextnorm::UncertaintyCategory::Scientific,
+        uktextnorm::UncertaintyCategory::Coordinate};
     return categories;
 }
 
@@ -370,6 +376,34 @@ uktextnorm::NormalizePreset parse_preset(std::string_view value)
     throw std::runtime_error("unknown preset: " + std::string(value));
 }
 
+uktextnorm::ColonStyle parse_colon_style(std::string_view value)
+{
+    if (value == "contextual") {
+        return uktextnorm::ColonStyle::Contextual;
+    }
+    if (value == "clock") {
+        return uktextnorm::ColonStyle::Clock;
+    }
+    if (value == "ratio") {
+        return uktextnorm::ColonStyle::Ratio;
+    }
+    throw std::runtime_error("unknown colon style: " + std::string(value));
+}
+
+uktextnorm::NumericDateOrder parse_date_order(std::string_view value)
+{
+    if (value == "dmy") {
+        return uktextnorm::NumericDateOrder::DayMonthYear;
+    }
+    if (value == "mdy") {
+        return uktextnorm::NumericDateOrder::MonthDayYear;
+    }
+    if (value == "preserve-ambiguous") {
+        return uktextnorm::NumericDateOrder::PreserveAmbiguous;
+    }
+    throw std::runtime_error("unknown date order: " + std::string(value));
+}
+
 void print_line_by_line(std::string_view text, const uktextnorm::NormalizeOptions& options)
 {
     std::size_t start = 0;
@@ -513,6 +547,12 @@ int main(int argc, char** argv)
                 options.symbol_style = uktextnorm::SymbolStyle::Preserve;
             } else if (arg == "--spoken-dates") {
                 options.date_style = uktextnorm::DateStyle::Spoken;
+            } else if (arg == "--colon-style") {
+                options.colon_style = parse_colon_style(next(arg));
+            } else if (arg == "--date-order") {
+                options.numeric_date_order = parse_date_order(next(arg));
+            } else if (arg == "--preserve-ambiguous-currency") {
+                options.currency_symbol_policy = uktextnorm::CurrencySymbolPolicy::PreserveAmbiguous;
             } else if (arg == "--no-known-acronyms") {
                 options.expand_known_acronyms = false;
             } else if (arg == "--no-acronym-spelling") {

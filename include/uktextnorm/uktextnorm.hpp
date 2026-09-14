@@ -25,6 +25,7 @@ enum class UncertaintyCategory {
     Fraction,
     Network,
     Scientific,
+    Coordinate,
 };
 
 enum class UncertaintySeverity {
@@ -51,6 +52,23 @@ enum class SymbolStyle {
 enum class DateStyle {
     Formal,
     Spoken,
+};
+
+enum class ColonStyle {
+    Contextual,
+    Clock,
+    Ratio,
+};
+
+enum class NumericDateOrder {
+    DayMonthYear,
+    MonthDayYear,
+    PreserveAmbiguous,
+};
+
+enum class CurrencySymbolPolicy {
+    AssumeCommon,
+    PreserveAmbiguous,
 };
 
 enum class QuoteStyle {
@@ -92,6 +110,9 @@ struct NormalizeOptions {
     PhoneStyle phone_style = PhoneStyle::Grouped;
     SymbolStyle symbol_style = SymbolStyle::Expand;
     DateStyle date_style = DateStyle::Formal;
+    ColonStyle colon_style = ColonStyle::Contextual;
+    NumericDateOrder numeric_date_order = NumericDateOrder::DayMonthYear;
+    CurrencySymbolPolicy currency_symbol_policy = CurrencySymbolPolicy::AssumeCommon;
 };
 
 [[nodiscard]] NormalizeOptions options_for_preset(NormalizePreset preset);

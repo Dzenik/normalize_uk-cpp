@@ -64,6 +64,18 @@ class NormalizeUkBindingTests(unittest.TestCase):
             with self.subTest(source=source):
                 self.assertEqual(nuk.normalize_ukrainian(source, self.options), expected)
 
+    def test_ambiguity_policies(self) -> None:
+        options = nuk.NormalizeOptions()
+        options.colon_style = nuk.ColonStyle.Ratio
+        self.assertEqual(nuk.normalize_ukrainian("10:30", options), "десять до тридцяти")
+        options.numeric_date_order = nuk.NumericDateOrder.MonthDayYear
+        self.assertEqual(
+            nuk.normalize_ukrainian("03/04/2026", options),
+            "четверте березня дві тисячі двадцять шостого року",
+        )
+        options.currency_symbol_policy = nuk.CurrencySymbolPolicy.PreserveAmbiguous
+        self.assertEqual(nuk.normalize_ukrainian("$12", options), "$дванадцять")
+
     def test_uncertainty_categories(self) -> None:
         cases = {
             "99:30": nuk.UncertaintyCategory.Time,
@@ -94,6 +106,10 @@ class NormalizeUkBindingTests(unittest.TestCase):
         self.assertEqual(
             nuk.normalize_ukrainian("<speak>5 кг</speak>", self.options),
             "<speak>п'ять кілограмів</speak>",
+        )
+        self.assertEqual(
+            nuk.normalize_ukrainian("[5 кг](https://example.com?a=1&amp;b=2)", self.options),
+            "[п'ять кілограмів](https://example.com?a=1&amp;b=2)",
         )
 
 

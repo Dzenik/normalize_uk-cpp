@@ -14,22 +14,33 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Date support for `DD-MM-YYYY`, two-digit years, `YYYY/MM/DD`, `YYYY-MM`, month-year expressions, dates without a
   year, cross-month ranges, and ISO date-time values.
 - Time support for seconds, AM/PM suffixes, UTC/GMT offsets, midnight, and numeric ratios.
+- Explicit ambiguity policies for colon-delimited clock/ratio values, local numeric date order, and ambiguous currency
+  symbols, exposed through the C++, Python, and CLI APIs.
+- ISO 8601 duration, week-date, and ordinal-date readings, selected IANA timezone names, and validation diagnostics
+  for invalid week dates, ordinal dates, and UTC/GMT offsets.
 - Scientific notation support for `e` notation, multiplication by powers of ten, ordinary powers, and superscript
   exponents.
 - Broader measurement coverage, including SI and IEC data units, imperial units, pressure, energy, power, frequency,
   acceleration, density, data rates, fuel economy, revolutions, decibels, parts per million, basis points, DPI, and
   frame rates.
+- Compound engineering and medical measurements for force, torque, viscosity, irradiance, molarity, dosage,
+  particulate concentration, and electric-vehicle energy use, plus a composable fallback for products, quotients,
+  powers, and compact or percentage tolerances.
 - Finance support for SOL, XRP, ADA, and DOGE, plus RUB, KRW, BRL, ZAR, NZD, MXN, SGD, and HKD currencies.
 - Structured-data normalization for IPv4 ports and CIDR prefixes, IPv6 CIDR and bracketed endpoints, MAC addresses,
   UUIDs, ISBNs, ISSNs, VINs, SWIFT/BIC codes, and non-Ukrainian IBANs.
 - Phone-number support for international `00` prefixes and extension markers such as `доб.`, `дод.`, `ext`, and `x`.
 - Decimal and DMS coordinates with Latin or Ukrainian hemisphere markers and coordinate validation.
+- Geo URI coordinates, labeled latitude/longitude pairs, optional altitude, and degrees with decimal minutes.
 - Legal ranges for articles, parts, points, subpoints, paragraphs, chapters, tables, and figures.
 - URL support for FTP, arbitrary top-level domains, fragments, Unicode email addresses, and punycode-like labels.
 - Preservation of HTML/SSML tags, comments, fenced code blocks, and inline code during normalization.
+- Preservation of Markdown link destinations, reference URLs, tilde fences, and HTML character entities while visible
+  link text remains normalizable.
 - Uncertainty categories for invalid times, fractions, network values, and scientific notation in the C++, Python,
   and CLI APIs.
 - Cross-platform CI for Linux, macOS, and Windows, plus Clang AddressSanitizer and UndefinedBehaviorSanitizer checks.
+- A Clang/libFuzzer harness covering every preset and uncertainty scanning, with a sanitizer CI smoke test.
 - CLI integration tests, expanded Python binding tests, and normalization idempotence coverage.
 
 ### Changed
@@ -37,6 +48,7 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Measurement and finance lexicons now define a dedicated decimal agreement form.
 - Finance normalization is generated from the finance lexicon instead of using a fixed ticker list.
 - Unicode token detection now compares complete code points instead of individual UTF-8 bytes.
+- Numeric dates governed by `від`, `до`, `з`, `із`, `після`, or `станом на` now use the Ukrainian genitive day form.
 - IPv6 zero compression is pronounced explicitly as `скорочення нулів`.
 - Soft-stem ordinal inflection now produces forms such as `третя` and `третього`.
 
@@ -55,5 +67,7 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Invalid clock values, AM/PM values, dates, coordinates, IP addresses, CIDR prefixes, and ports are rejected or
   reported as uncertain instead of receiving misleading readings.
 - Multiple occurrences of the same currency in one input are all normalized.
+- ISBN-10/13, ISSN, IBAN, payment-card, VIN, UUID, and labeled hash candidates now receive checksum, length, version,
+  or variant validation and error-level uncertainty metadata when invalid.
 
 [0.4.0]: https://github.com/ThirdLetterC/normalize_uk-cpp/releases/tag/v0.4.0

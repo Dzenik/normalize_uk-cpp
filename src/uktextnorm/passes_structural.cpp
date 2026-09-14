@@ -611,6 +611,88 @@ std::string normalize_ip_addresses(std::string text)
 
 std::string normalize_coordinates(std::string text)
 {
+    auto coordinate_magnitude = [](std::string token) {
+        if (token.starts_with("−")) {
+            token.erase(0, std::string_view("−").size());
+        } else if (!token.empty() && (token.front() == '+' || token.front() == '-')) {
+            token.erase(token.begin());
+        }
+        return token;
+    };
+    auto decimal_coordinate = [](std::string token) {
+        if (token.starts_with("−")) {
+            token.erase(0, std::string_view("−").size());
+        } else if (!token.empty() && (token.front() == '+' || token.front() == '-')) {
+            token.erase(token.begin());
+        }
+        const auto decimal = token.find_first_of(".,");
+        return decimal == std::string::npos ? number_to_words(parse_ull(token))
+                                            : decimal_to_words(std::string_view(token).substr(0, decimal),
+                                                               std::string_view(token).substr(decimal + 1));
+    };
+    auto exceeds_coordinate_limit = [&](const std::string& token, int limit) {
+        const auto magnitude = coordinate_magnitude(token);
+        const auto decimal = magnitude.find_first_of(".,");
+        const auto degrees = parse_int(std::string_view(magnitude).substr(0, decimal));
+        const bool nonzero_fraction =
+            decimal != std::string::npos && magnitude.substr(decimal + 1).find_first_not_of('0') != std::string::npos;
+        return degrees > limit || (degrees == limit && nonzero_fraction);
+    };
+    auto signed_quantity = [&](const std::string& token) {
+        const auto sign = token.starts_with('-') || token.starts_with("−") ? "мінус "
+                          : token.starts_with('+')                         ? "плюс "
+                                                                           : "";
+        return std::string(sign) + decimal_coordinate(token);
+    };
+    static const std::regex geo_uri(
+        R"((^|[^A-Za-zА-Яа-яЄєІіЇїҐґ])((?:geo|координати)\s*[:=]\s*)((?:[+\-]|−)?\d{1,2}(?:\.\d+)?)\s*[,;]\s*((?:[+\-]|−)?\d{1,3}(?:\.\d+)?)(?:\s*[,;]\s*((?:[+\-]|−)?\d+(?:\.\d+)?))?)",
+        std::regex::icase);
+    text = regex_sub(text, geo_uri, [&](const std::smatch& m) {
+        auto latitude = m[3].str();
+        auto longitude = m[4].str();
+        if (exceeds_coordinate_limit(latitude, 90) || exceeds_coordinate_limit(longitude, 180)) {
+            return m.str();
+        }
+        const bool south = latitude.starts_with('-') || latitude.starts_with("−");
+        const bool west = longitude.starts_with('-') || longitude.starts_with("−");
+        std::string out = m[1].str() + "географічні координати: " + decimal_coordinate(latitude) + " градуса " +
+                          (south ? "південної" : "північної") + " широти, " + decimal_coordinate(longitude) +
+                          " градуса " + (west ? "західної" : "східної") + " довготи";
+        if (m[5].matched) {
+            out += ", висота " + signed_quantity(m[5].str()) + " метрів";
+        }
+        return out;
+    });
+    static const std::regex labelled_pair(
+        R"((^|[^A-Za-z])(?:lat(?:itude)?|широта)\s*[:=]\s*((?:[+\-]|−)?\d{1,2}(?:[.,]\d+)?)\s*[,; ]+\s*(?:lon(?:gitude)?|довгота)\s*[:=]\s*((?:[+\-]|−)?\d{1,3}(?:[.,]\d+)?))",
+        std::regex::icase);
+    text = regex_sub(text, labelled_pair, [&](const std::smatch& m) {
+        const auto latitude = m[2].str();
+        const auto longitude = m[3].str();
+        if (exceeds_coordinate_limit(latitude, 90) || exceeds_coordinate_limit(longitude, 180)) {
+            return m.str();
+        }
+        return m[1].str() + "широта " + decimal_coordinate(latitude) +
+               (latitude.starts_with('-') || latitude.starts_with("−") ? " південна" : " північна") + ", довгота " +
+               decimal_coordinate(longitude) +
+               (longitude.starts_with('-') || longitude.starts_with("−") ? " західна" : " східна");
+    });
+    static const std::regex decimal_minutes(
+        R"((^|[^\d])(\d{1,3})\s*°\s*(\d{1,2})[.,](\d+)\s*(?:′|')\s*((?:N|S|E|W)|(?:пн|пд|сх|зх)\.?\s*(?:ш|д)\.?))",
+        std::regex::icase);
+    text = regex_sub(text, decimal_minutes, [](const std::smatch& m) {
+        const auto degrees = parse_int(m[2].str());
+        const auto minutes = parse_int(m[3].str());
+        const auto marker = lower_text(m[5].str());
+        const bool latitude = marker == "n" || marker == "s" || marker.starts_with("пн") || marker.starts_with("пд");
+        if (degrees > (latitude ? 90 : 180) || minutes > 59 ||
+            (degrees == (latitude ? 90 : 180) &&
+             (minutes != 0 || m[4].str().find_first_not_of('0') != std::string::npos))) {
+            return m.str();
+        }
+        return m[1].str() + number_to_words(static_cast<unsigned long long>(degrees)) + " градусів " +
+               decimal_to_words(m[3].str(), m[4].str()) + " хвилини " + coordinate_hemisphere(m[5].str());
+    });
     static const std::regex decimal(
         R"((^|[^\d.,])((?:[+\-]|−)?)(\d{1,3})(?:[.,](\d+))?\s*(?:°)?\s*([NSEW])(?![A-Za-z]))", std::regex::icase);
     text = regex_sub(text, decimal, [](const std::smatch& m) {
@@ -664,8 +746,9 @@ std::string normalize_identifiers(std::string text)
 {
     static const std::regex uuid(
         R"(\b([0-9A-Fa-f]{8})-([0-9A-Fa-f]{4})-([0-9A-Fa-f]{4})-([0-9A-Fa-f]{4})-([0-9A-Fa-f]{12})\b)");
-    static const std::regex labelled_hash(R"(\b((?:SHA-?(?:1|224|256|384|512)|MD5))\s*[:=]?\s*([0-9A-Fa-f]{16,128})\b)",
-                                          std::regex::icase);
+    static const std::regex labelled_hash(
+        R"(\b((?:SHA-?(?:1|224|256|384|512)|SHA3-?(?:256|512)|BLAKE2[bs]|MD5))\s*[:=]?\s*([0-9A-Fa-f]{16,128})\b)",
+        std::regex::icase);
     static const std::regex isbn(R"(\b(ISBN(?:-1[03])?)\s*[:№#]?\s*((?:97[89][ -]?)?[0-9Xx](?:[ -]?[0-9Xx]){8,12})\b)",
                                  std::regex::icase);
     static const std::regex issn(R"(\b(ISSN)\s*[:№#]?\s*(\d{4})[ -]?(\d{3}[\dXx])\b)", std::regex::icase);

@@ -12,24 +12,64 @@ namespace {
 
 std::string protect_opaque_markup(std::string text, std::vector<std::pair<std::string, std::string>>& protected_spans)
 {
-    static const std::regex opaque(R"((<!--[\s\S]*?-->|```[\s\S]*?```|`[^`\r\n]*`|<[^<>]+>))");
-    return regex_sub(text, opaque, [&](const std::smatch& m) {
+    auto protect = [&](std::string value) {
         std::string key;
         append_utf8(key, U'\uE000');
         append_utf8(key, static_cast<char32_t>(U'\uE100' + protected_spans.size()));
         append_utf8(key, U'\uE001');
-        protected_spans.emplace_back(key, m.str());
+        protected_spans.emplace_back(key, std::move(value));
         return key;
+    };
+    static const std::regex opaque(
+        R"((<!--[\s\S]*?-->|```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\r\n]*`|<[^<>]+>|&(?:#[0-9]+|#[xX][0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]+);))");
+    text = regex_sub(text, opaque, [&](const std::smatch& m) { return protect(m.str()); });
+    static const std::regex markdown_destination(R"((\]\(\s*)([^)\r\n]+)(\s*\)))");
+    text = regex_sub(text, markdown_destination, [&](const std::smatch& m) {
+        return m[1].str() + protect(m[2].str()) + m[3].str();
     });
+    static const std::regex markdown_reference(R"((^|\n)([ \t]{0,3}\[[^\]\r\n]+\]:[ \t]*)(\S+))", std::regex::icase);
+    return regex_sub(
+        text, markdown_reference, [&](const std::smatch& m) { return m[1].str() + m[2].str() + protect(m[3].str()); });
 }
 
 std::string restore_opaque_markup(std::string text,
                                   const std::vector<std::pair<std::string, std::string>>& protected_spans)
 {
-    for (const auto& [key, value] : protected_spans) {
-        replace_all(text, key, value);
+    for (auto it = protected_spans.rbegin(); it != protected_spans.rend(); ++it) {
+        replace_all(text, it->first, it->second);
     }
     return text;
+}
+
+void protect_ambiguous_currency_symbols(std::string& text,
+                                        std::vector<std::pair<std::string, std::string>>& protected_spans)
+{
+    for (const auto symbol : {std::string_view("$"), std::string_view("¥")}) {
+        std::size_t pos = 0;
+        while ((pos = text.find(symbol, pos)) != std::string::npos) {
+            std::string key;
+            append_utf8(key, U'\uE000');
+            append_utf8(key, static_cast<char32_t>(U'\uE100' + protected_spans.size()));
+            append_utf8(key, U'\uE001');
+            protected_spans.emplace_back(key, std::string(symbol));
+            text.replace(pos, symbol.size(), key);
+            pos += key.size();
+        }
+    }
+}
+
+void protect_ambiguous_numeric_dates(std::string& text,
+                                     std::vector<std::pair<std::string, std::string>>& protected_spans)
+{
+    static const std::regex ambiguous(R"(\b(?:0?[1-9]|1[0-2])[./-](?:0?[1-9]|1[0-2])[./-](?:\d{2}|\d{4})\b)");
+    text = regex_sub(text, ambiguous, [&](const std::smatch& match) {
+        std::string key;
+        append_utf8(key, U'\uE000');
+        append_utf8(key, static_cast<char32_t>(U'\uE100' + protected_spans.size()));
+        append_utf8(key, U'\uE001');
+        protected_spans.emplace_back(key, match.str());
+        return key;
+    });
 }
 
 } // namespace
@@ -84,6 +124,12 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
 {
     std::vector<std::pair<std::string, std::string>> protected_spans;
     std::string text = protect_opaque_markup(std::string(input), protected_spans);
+    if (options.currency_symbol_policy == CurrencySymbolPolicy::PreserveAmbiguous) {
+        protect_ambiguous_currency_symbols(text, protected_spans);
+    }
+    if (options.numeric_date_order == NumericDateOrder::PreserveAmbiguous) {
+        protect_ambiguous_numeric_dates(text, protected_spans);
+    }
     const auto maybe_digits = [&] { return has_ascii_digit(text); };
     const auto maybe_roman = [&] { return has_roman_candidate(text); };
     const auto maybe_currency = [&] { return has_currency_candidate(text); };
@@ -127,7 +173,11 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
         text = normalize_number_groups(std::move(text), options.parse_thousand_separators);
         text = normalize_identifiers(std::move(text));
         text = normalize_scientific(std::move(text));
-        text = normalize_dates(std::move(text), options.date_style, options.validate_dates, options.range_style);
+        text = normalize_dates(std::move(text),
+                               options.date_style,
+                               options.validate_dates,
+                               options.range_style,
+                               options.numeric_date_order);
         text = normalize_section_ranges(std::move(text), options.range_style);
         text = normalize_ranges(std::move(text), options.range_style);
         text = normalize_discourse_dates(std::move(text));
@@ -141,7 +191,7 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
             text = normalize_sections(std::move(text));
         }
         if (contains_any(text, ":-–—")) {
-            text = normalize_time(std::move(text));
+            text = normalize_time(std::move(text), options.colon_style);
         }
         text = normalize_counted_nouns(std::move(text));
         text = normalize_ordinal_triggers(std::move(text));
@@ -240,6 +290,45 @@ std::vector<UncertainSpan> flag_uncertain(std::string_view text)
         }
     };
     std::string input(text);
+    auto decimal_value = [](std::string token) {
+        replace_all(token, ",", ".");
+        try {
+            return std::optional<double>(std::stod(token));
+        } catch (...) {
+            return std::optional<double>{};
+        }
+    };
+    static const std::regex ambiguous_numeric_date(
+        R"(\b(?:0?[1-9]|1[0-2])[./-](?:0?[1-9]|1[0-2])[./-](?:\d{2}|\d{4})\b)");
+    for (std::sregex_iterator it(input.begin(), input.end(), ambiguous_numeric_date), end; it != end; ++it) {
+        add((*it).position(),
+            (*it).position() + (*it).length(),
+            "ambiguous numeric date order (day/month or month/day)",
+            UncertaintyCategory::Date,
+            UncertaintySeverity::Warning);
+    }
+    static const std::regex ambiguous_colon(R"((^|[^\d:])(\d{1,2}):([0-5]\d)(?![\d:]))");
+    for (std::sregex_iterator it(input.begin(), input.end(), ambiguous_colon), end; it != end; ++it) {
+        const auto hour = parse_int((*it)[2].str());
+        const auto minute = parse_int((*it)[3].str());
+        if (hour > 23 && !(hour == 24 && minute == 0)) {
+            continue;
+        }
+        const auto s = static_cast<std::size_t>((*it).position(2));
+        add(s,
+            s + (*it)[2].length() + 1 + (*it)[3].length(),
+            "ambiguous colon pair (clock time or ratio)",
+            UncertaintyCategory::Time,
+            UncertaintySeverity::Warning);
+    }
+    static const std::regex ambiguous_currency_symbol(R"((?:\$|¥)\s*\d+(?:[.,]\d+)?)");
+    for (std::sregex_iterator it(input.begin(), input.end(), ambiguous_currency_symbol), end; it != end; ++it) {
+        add((*it).position(),
+            (*it).position() + (*it).length(),
+            "ambiguous currency symbol (currency depends on locale)",
+            UncertaintyCategory::Currency,
+            UncertaintySeverity::Warning);
+    }
     ctre_each<R"((^|[^\d])(\d{1,2})\.(\d{1,2})\.(\d{3,4})(?![\d]))">(input, [&](const auto& m) {
         const auto day = parse_int(cap<2>(m));
         const auto month = parse_int(cap<3>(m));
@@ -270,6 +359,59 @@ std::vector<UncertainSpan> flag_uncertain(std::string_view text)
         const auto s = static_cast<std::size_t>((*it).position(2));
         const auto e = static_cast<std::size_t>((*it).position(0) + (*it).length(0));
         add(s, e, "invalid ISO date", UncertaintyCategory::InvalidDate, UncertaintySeverity::Error);
+    }
+    static const std::regex iso_week_candidate(R"(\b(\d{4})-W(\d{2})(?:-(\d))?\b)", std::regex::icase);
+    for (std::sregex_iterator it(input.begin(), input.end(), iso_week_candidate), end; it != end; ++it) {
+        const auto week = parse_int((*it)[2].str());
+        const auto day = (*it)[3].matched ? parse_int((*it)[3].str()) : 1;
+        if (is_valid_iso_week(parse_int((*it)[1].str()), week) && day >= 1 && day <= 7) {
+            continue;
+        }
+        add((*it).position(),
+            (*it).position() + (*it).length(),
+            "invalid ISO week date",
+            UncertaintyCategory::InvalidDate,
+            UncertaintySeverity::Error);
+    }
+    static const std::regex iso_ordinal_candidate(R"(\b(\d{4})-(\d{3})\b)");
+    for (std::sregex_iterator it(input.begin(), input.end(), iso_ordinal_candidate), end; it != end; ++it) {
+        const auto year = parse_int((*it)[1].str());
+        const auto day = parse_int((*it)[2].str());
+        const bool leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+        if (day >= 1 && day <= (leap ? 366 : 365)) {
+            continue;
+        }
+        add((*it).position(),
+            (*it).position() + (*it).length(),
+            "invalid ISO ordinal date",
+            UncertaintyCategory::InvalidDate,
+            UncertaintySeverity::Error);
+    }
+    static const std::regex timezone_offset(R"((?:UTC|GMT)?\s*([+-])(\d{2}):?(\d{2})(?!\d))", std::regex::icase);
+    for (std::sregex_iterator it(input.begin(), input.end(), timezone_offset), end; it != end; ++it) {
+        const auto hour = parse_int((*it)[2].str());
+        const auto minute = parse_int((*it)[3].str());
+        if (hour < 14 || (hour == 14 && minute == 0)) {
+            continue;
+        }
+        add((*it).position(),
+            (*it).position() + (*it).length(),
+            "invalid timezone offset",
+            UncertaintyCategory::Time,
+            UncertaintySeverity::Error);
+    }
+    static const std::regex iana_zone(R"(\b[A-Za-z_+-]+/[A-Za-z0-9_+/-]+\b)");
+    static const std::unordered_set<std::string> supported_iana_zones = {
+        "Europe/Kyiv", "Europe/London", "Europe/Warsaw", "America/New_York", "America/Los_Angeles", "Asia/Tokyo"};
+    for (std::sregex_iterator it(input.begin(), input.end(), iana_zone), end; it != end; ++it) {
+        if (supported_iana_zones.contains(it->str())) {
+            continue;
+        }
+        add((*it).position(),
+            (*it).position() + (*it).length(),
+            "unrecognized IANA timezone name",
+            UncertaintyCategory::Time,
+            UncertaintySeverity::Warning);
     }
     ctre_each<R"((^|[^\d.,])(\d{1,3},\d{3})(?![\d]))">(input, [&](const auto& m) {
         const auto s = cap_pos<2>(input, m);
@@ -335,6 +477,38 @@ std::vector<UncertainSpan> flag_uncertain(std::string_view text)
         const auto s = static_cast<std::size_t>((*it).position(2));
         const auto e = static_cast<std::size_t>((*it).position(0) + (*it).length(0));
         add(s, e, "invalid IP address, CIDR prefix, or port", UncertaintyCategory::Network, UncertaintySeverity::Error);
+    }
+    static const std::regex geo_candidate(
+        R"(\bgeo\s*:\s*([+\-]?\d{1,3}(?:\.\d+)?)\s*[,;]\s*([+\-]?\d{1,3}(?:\.\d+)?)(?:\s*[,;]\s*[+\-]?\d+(?:\.\d+)?)?)",
+        std::regex::icase);
+    for (std::sregex_iterator it(input.begin(), input.end(), geo_candidate), end; it != end; ++it) {
+        const auto latitude = decimal_value((*it)[1].str());
+        const auto longitude = decimal_value((*it)[2].str());
+        if (latitude && longitude && std::abs(*latitude) <= 90.0 && std::abs(*longitude) <= 180.0) {
+            continue;
+        }
+        add((*it).position(),
+            (*it).position() + (*it).length(),
+            "coordinate outside latitude or longitude bounds",
+            UncertaintyCategory::Coordinate,
+            UncertaintySeverity::Error);
+    }
+    static const std::regex dms_candidate(R"((\d{1,3})\s*°\s*(\d{1,2})\s*(?:′|')\s*(\d{1,2})\s*(?:″|")\s*([NSEW]))",
+                                          std::regex::icase);
+    for (std::sregex_iterator it(input.begin(), input.end(), dms_candidate), end; it != end; ++it) {
+        const auto marker = lower_text((*it)[4].str());
+        const auto limit = marker == "n" || marker == "s" ? 90 : 180;
+        const auto degrees = parse_int((*it)[1].str());
+        const auto minutes = parse_int((*it)[2].str());
+        const auto seconds = parse_int((*it)[3].str());
+        if (degrees <= limit && minutes <= 59 && seconds <= 59 && (degrees < limit || (minutes == 0 && seconds == 0))) {
+            continue;
+        }
+        add((*it).position(),
+            (*it).position() + (*it).length(),
+            "invalid degrees, minutes, or seconds coordinate",
+            UncertaintyCategory::Coordinate,
+            UncertaintySeverity::Error);
     }
     static const std::unordered_map<std::string, std::string> multisense = {
         {"р", "рік / рядок / річка"},
@@ -427,8 +601,84 @@ std::vector<UncertainSpan> flag_uncertain(std::string_view text)
                 UncertaintySeverity::Info);
         }
     });
+    static const std::regex isbn_candidate(
+        R"(\bISBN(?:-1[03])?\s*[:№#]?\s*((?:97[89][ -]?)?[0-9Xx](?:[ -]?[0-9Xx]){8,12})\b)", std::regex::icase);
+    for (std::sregex_iterator it(input.begin(), input.end(), isbn_candidate), end; it != end; ++it) {
+        if (!valid_isbn((*it)[1].str())) {
+            add((*it).position(),
+                (*it).position() + (*it).length(),
+                "invalid ISBN checksum or length",
+                UncertaintyCategory::Identifier,
+                UncertaintySeverity::Error);
+        }
+    }
+    static const std::regex issn_candidate(R"(\bISSN\s*[:№#]?\s*(\d{4}[ -]?\d{3}[\dXx])\b)", std::regex::icase);
+    for (std::sregex_iterator it(input.begin(), input.end(), issn_candidate), end; it != end; ++it) {
+        if (!valid_issn((*it)[1].str())) {
+            add((*it).position(),
+                (*it).position() + (*it).length(),
+                "invalid ISSN checksum",
+                UncertaintyCategory::Identifier,
+                UncertaintySeverity::Error);
+        }
+    }
+    static const std::regex iban_candidate(R"(\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]){11,30}\b)", std::regex::icase);
+    for (std::sregex_iterator it(input.begin(), input.end(), iban_candidate), end; it != end; ++it) {
+        if (!valid_iban(it->str())) {
+            add((*it).position(),
+                (*it).position() + (*it).length(),
+                "invalid IBAN checksum or length",
+                UncertaintyCategory::Identifier,
+                UncertaintySeverity::Error);
+        }
+    }
+    static const std::regex full_card_candidate(
+        R"((^|[^A-Za-zА-Яа-яЄєІіЇїҐґ])((?:картка|картку|карта|карту)\s+(\d(?:[ -]?\d){11,18}))(?!\d))",
+        std::regex::icase);
+    for (std::sregex_iterator it(input.begin(), input.end(), full_card_candidate), end; it != end; ++it) {
+        if (!valid_luhn((*it)[3].str())) {
+            const auto s = static_cast<std::size_t>((*it).position(2));
+            add(s,
+                s + (*it)[2].length(),
+                "invalid payment-card checksum",
+                UncertaintyCategory::Identifier,
+                UncertaintySeverity::Error);
+        }
+    }
+    static const std::regex vin_candidate(R"(\bVIN\s*[:№#]?\s*([A-HJ-NPR-Z0-9]{17})\b)", std::regex::icase);
+    for (std::sregex_iterator it(input.begin(), input.end(), vin_candidate), end; it != end; ++it) {
+        if (!valid_vin_checksum((*it)[1].str())) {
+            add((*it).position(),
+                (*it).position() + (*it).length(),
+                "invalid VIN checksum",
+                UncertaintyCategory::Identifier,
+                UncertaintySeverity::Error);
+        }
+    }
+    static const std::regex uuid_candidate(R"(\b[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}\b)");
+    for (std::sregex_iterator it(input.begin(), input.end(), uuid_candidate), end; it != end; ++it) {
+        if (!valid_uuid_variant(it->str())) {
+            add((*it).position(),
+                (*it).position() + (*it).length(),
+                "invalid UUID version or variant",
+                UncertaintyCategory::Identifier,
+                UncertaintySeverity::Error);
+        }
+    }
+    static const std::regex hash_candidate(
+        R"(\b((?:SHA-?(?:1|224|256|384|512)|SHA3-?(?:256|512)|BLAKE2[bs]|MD5))\s*[:=]?\s*([0-9A-Fa-f]{16,128})\b)",
+        std::regex::icase);
+    for (std::sregex_iterator it(input.begin(), input.end(), hash_candidate), end; it != end; ++it) {
+        if (!valid_hash_length((*it)[1].str(), (*it)[2].str())) {
+            add((*it).position(),
+                (*it).position() + (*it).length(),
+                "hash length does not match its algorithm",
+                UncertaintyCategory::Identifier,
+                UncertaintySeverity::Error);
+        }
+    }
     static const std::regex identifier(
-        R"((?:№\s*[A-Za-zА-Яа-яЄєІіЇїҐґ0-9]+(?:[-/][A-Za-zА-Яа-яЄєІіЇїҐґ0-9]+)+|(?:ЄДРПОУ|РНОКПП|ІПН|ЄРДР)\.?\s*[:№#]?\s*\d{6,20}|паспорт\s+[A-Za-zА-Яа-яЄєІіЇїҐґ]{2}\s*\d{6,9}|(?:картка|картку|карта|карту)\s*\d{4}[\s-]+(?:(?:\*{4}|xxxx|XXXX)[\s-]+(?:\*{4}|xxxx|XXXX)|\d{4}[\s-]+\d{4})[\s-]+\d{4}|\b[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}\b|\b(?:ISBN|ISSN|VIN|SWIFT|BIC)\b\s*[:№#]?\s*[A-Z0-9 -]{8,32}))",
+        R"((?:№\s*[A-Za-zА-Яа-яЄєІіЇїҐґ0-9]+(?:[-/][A-Za-zА-Яа-яЄєІіЇїҐґ0-9]+)+|(?:ЄДРПОУ|РНОКПП|ІПН|ЄРДР)\.?\s*[:№#]?\s*\d{6,20}|паспорт\s+[A-Za-zА-Яа-яЄєІіЇїҐґ]{2}\s*\d{6,9}|(?:картка|картку|карта|карту)\s*\d{4}[\s-]+(?:(?:\*{4}|xxxx|XXXX)[\s-]+(?:\*{4}|xxxx|XXXX)|\d{4}[\s-]+\d{4})[\s-]+\d{4}|\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]){11,30}\b|\b[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}\b|\b(?:ISBN|ISSN|VIN|SWIFT|BIC)\b\s*[:№#]?\s*[A-Z0-9 -]{8,32}))",
         std::regex::icase);
     for (std::sregex_iterator it(input.begin(), input.end(), identifier), end; it != end; ++it) {
         add((*it).position(),

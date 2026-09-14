@@ -79,6 +79,20 @@ void expect_uncertain_metadata(const std::string& name,
     std::cerr << name << "\nexpected metadata span: " << text << "\n";
 }
 
+void expect_no_uncertain_metadata(const std::string& name,
+                                  const std::vector<uktextnorm::UncertainSpan>& spans,
+                                  const std::string& text,
+                                  uktextnorm::UncertaintySeverity severity)
+{
+    for (const auto& span : spans) {
+        if (span.text == text && span.severity == severity) {
+            ++failures;
+            std::cerr << name << "\nunexpected metadata span: " << text << "\n";
+            return;
+        }
+    }
+}
+
 void run_golden_file(const std::string& path)
 {
     std::ifstream in(path);
@@ -437,6 +451,17 @@ int main(int argc, char** argv)
               normalize_ukrainian("2026-09-14T10:30:00Z", range_options),
               "чотирнадцяте вересня дві тисячі двадцять шостого року о десять годин тридцять хвилин за всесвітнім "
               "координованим часом");
+    expect_eq("ISO duration",
+              normalize_ukrainian("P1Y2M3DT4H5M6S"),
+              "один рік два місяці три дні чотири години п'ять хвилин шість секунд");
+    expect_eq("ISO week date",
+              normalize_ukrainian("2026-W37-1"),
+              "перший день тридцять сьомого тижня дві тисячі двадцять шостого року");
+    expect_eq("ISO ordinal date",
+              normalize_ukrainian("2024-366"),
+              "триста шістдесят шостий день дві тисячі двадцять четвертого року");
+    expect_eq(
+        "IANA timezone", normalize_ukrainian("10:30 Europe/Kyiv"), "десять годин тридцять хвилин за київським часом");
     expect_eq("PM time", normalize_ukrainian("10:30 PM"), "десять годин тридцять хвилин вечора");
     expect_eq("midnight", normalize_ukrainian("00:00"), "опівночі");
     expect_eq("ratio", normalize_ukrainian("16:9"), "шістнадцять до дев'яти");
@@ -455,6 +480,18 @@ int main(int argc, char** argv)
     expect_eq(
         "fuel economy", normalize_ukrainian("6.5 L/100km"), "шість цілих і п'ять десятих літра на сто кілометрів");
     expect_eq("imperial unit", normalize_ukrainian("12 oz"), "дванадцять унцій");
+    expect_eq("torque unit", normalize_ukrainian("10 Н·м"), "десять ньютон-метрів");
+    expect_eq("composed force unit", normalize_ukrainian("20 кг·м/с²"), "двадцять ньютонів");
+    expect_eq("viscosity unit", normalize_ukrainian("0,5 Па·с"), "нуль цілих і п'ять десятих паскаль-секунди");
+    expect_eq(
+        "EV energy unit", normalize_ukrainian("18 кВт·год/100 км"), "вісімнадцять кіловат-годин на сто кілометрів");
+    expect_eq("composable unit fallback",
+              normalize_ukrainian("7 кг·м/с³"),
+              "сім кілограмів помножити на метр поділити на секунду у кубі");
+    expect_eq("compact measurement tolerance",
+              normalize_ukrainian("5±0,2 кг"),
+              "п'ять плюс мінус нуль цілих і дві десятих кілограма");
+    expect_eq("percentage tolerance", normalize_ukrainian("5 кг ± 2%"), "п'ять кілограмів плюс мінус два відсотки");
     expect_eq("IPv4 endpoint",
               normalize_ukrainian("192.168.1.1:8080"),
               "ай пі сто дев'яносто два сто шістдесят вісім один один порт вісім тисяч вісімдесят");
@@ -468,6 +505,14 @@ int main(int argc, char** argv)
               "п'ять тисяч двісті тридцять чотири десятитисячних градуса східної довготи");
     expect_not_contains("invalid decimal coordinates", normalize_ukrainian("90.1 N"), "північної широти");
     expect_not_contains("invalid DMS coordinates", normalize_ukrainian("50°99′00″N"), "північної широти");
+    expect_eq("geo URI",
+              normalize_ukrainian("geo:-33.8688,151.2093,58"),
+              "географічні координати: тридцять три цілих і вісім тисяч шістсот вісімдесят вісім десятитисячних "
+              "градуса південної широти, сто п'ятдесят одна ціла і дві тисячі дев'яносто три десятитисячних градуса "
+              "східної довготи, висота п'ятдесят вісім метрів");
+    expect_eq("decimal minute coordinate",
+              normalize_ukrainian("50°27,5′N"),
+              "п'ятдесят градусів двадцять сім цілих і п'ять десятих хвилини північної широти");
     expect_eq("UUID",
               normalize_ukrainian("550e8400-e29b-41d4-a716-446655440000"),
               "ю у ай ді п'ять п'ять нуль і вісім чотири нуль нуль дефіс і два дев'ять бі дефіс чотири один ді чотири "
@@ -492,6 +537,9 @@ int main(int argc, char** argv)
               "фтп двокрапка слеш слеш ексампле крапка дев слеш а решітка б");
     expect_eq("SSML preserved", normalize_ukrainian("<speak>5 кг</speak>"), "<speak>п'ять кілограмів</speak>");
     expect_eq("inline code preserved", normalize_ukrainian("Код `x=5`, вага 2 кг"), "Код `x=5`, вага два кілограми");
+    expect_eq("Markdown destination and entity preserved",
+              normalize_ukrainian("[5 кг](https://example.com/a?x=1&amp;y=2)"),
+              "[п'ять кілограмів](https://example.com/a?x=1&amp;y=2)");
     uktextnorm::NormalizeOptions compact_range_options;
     expect_eq("compact temperature range",
               normalize_ukrainian("-5–-3 °F", compact_range_options),
@@ -540,6 +588,23 @@ int main(int argc, char** argv)
     expect_eq("explicit preset API",
               uktextnorm::normalize_ukrainian_with_preset("OpenAI + ФОП", uktextnorm::NormalizePreset::SearchIndexing),
               "OpenAI + фізична особа підприємець");
+    {
+        uktextnorm::NormalizeOptions ambiguity;
+        ambiguity.colon_style = uktextnorm::ColonStyle::Ratio;
+        expect_eq("forced colon ratio", normalize_ukrainian("10:30", ambiguity), "десять до тридцяти");
+        ambiguity.colon_style = uktextnorm::ColonStyle::Clock;
+        expect_eq("forced colon clock", normalize_ukrainian("10:30", ambiguity), "десять годин тридцять хвилин");
+        ambiguity.numeric_date_order = uktextnorm::NumericDateOrder::MonthDayYear;
+        expect_eq("month day year policy",
+                  normalize_ukrainian("03/04/2026", ambiguity),
+                  "четверте березня дві тисячі двадцять шостого року");
+        ambiguity.numeric_date_order = uktextnorm::NumericDateOrder::PreserveAmbiguous;
+        expect_eq("preserve ambiguous numeric date", normalize_ukrainian("03/04/2026", ambiguity), "03/04/2026");
+        ambiguity.currency_symbol_policy = uktextnorm::CurrencySymbolPolicy::PreserveAmbiguous;
+        expect_eq("preserve ambiguous currency symbols",
+                  normalize_ukrainian("$12 і ¥500", ambiguity),
+                  "$дванадцять і ¥п'ятсот");
+    }
     expect_eq("preset helper conservative",
               normalize_ukrainian("OpenAI + ФОП", uktextnorm::NormalizePreset::Conservative),
               "OpenAI + ФОП");
@@ -606,10 +671,87 @@ int main(int argc, char** argv)
                               uktextnorm::flag_uncertain("картка 4149 1234 5678 9012"),
                               "картка 4149 1234 5678 9012",
                               uktextnorm::UncertaintyCategory::Identifier,
-                              uktextnorm::UncertaintySeverity::Info);
+                              uktextnorm::UncertaintySeverity::Error);
+    expect_no_uncertain_metadata("valid card checksum",
+                                 uktextnorm::flag_uncertain("картка 4111 1111 1111 1111"),
+                                 "картка 4111 1111 1111 1111",
+                                 uktextnorm::UncertaintySeverity::Error);
+    expect_no_uncertain_metadata("valid ISBN-13 checksum",
+                                 uktextnorm::flag_uncertain("ISBN 978-0-306-40615-7"),
+                                 "ISBN 978-0-306-40615-7",
+                                 uktextnorm::UncertaintySeverity::Error);
+    expect_uncertain_metadata("invalid ISBN-13 checksum",
+                              uktextnorm::flag_uncertain("ISBN 978-0-306-40615-8"),
+                              "ISBN 978-0-306-40615-8",
+                              uktextnorm::UncertaintyCategory::Identifier,
+                              uktextnorm::UncertaintySeverity::Error);
+    expect_no_uncertain_metadata("valid ISBN-10 checksum",
+                                 uktextnorm::flag_uncertain("ISBN-10 0-306-40615-2"),
+                                 "ISBN-10 0-306-40615-2",
+                                 uktextnorm::UncertaintySeverity::Error);
+    expect_no_uncertain_metadata("valid ISSN checksum",
+                                 uktextnorm::flag_uncertain("ISSN 0317-8471"),
+                                 "ISSN 0317-8471",
+                                 uktextnorm::UncertaintySeverity::Error);
+    expect_uncertain_metadata("invalid ISSN checksum",
+                              uktextnorm::flag_uncertain("ISSN 0317-8472"),
+                              "ISSN 0317-8472",
+                              uktextnorm::UncertaintyCategory::Identifier,
+                              uktextnorm::UncertaintySeverity::Error);
+    expect_no_uncertain_metadata("valid IBAN checksum",
+                                 uktextnorm::flag_uncertain("DE89 3704 0044 0532 0130 00"),
+                                 "DE89 3704 0044 0532 0130 00",
+                                 uktextnorm::UncertaintySeverity::Error);
+    expect_uncertain_metadata("invalid IBAN checksum",
+                              uktextnorm::flag_uncertain("DE88 3704 0044 0532 0130 00"),
+                              "DE88 3704 0044 0532 0130 00",
+                              uktextnorm::UncertaintyCategory::Identifier,
+                              uktextnorm::UncertaintySeverity::Error);
+    expect_no_uncertain_metadata("valid VIN checksum",
+                                 uktextnorm::flag_uncertain("VIN 1M8GDM9AXKP042788"),
+                                 "VIN 1M8GDM9AXKP042788",
+                                 uktextnorm::UncertaintySeverity::Error);
+    expect_uncertain_metadata("invalid VIN checksum",
+                              uktextnorm::flag_uncertain("VIN 1M8GDM9A1KP042788"),
+                              "VIN 1M8GDM9A1KP042788",
+                              uktextnorm::UncertaintyCategory::Identifier,
+                              uktextnorm::UncertaintySeverity::Error);
+    expect_no_uncertain_metadata("valid UUID version and variant",
+                                 uktextnorm::flag_uncertain("550e8400-e29b-41d4-a716-446655440000"),
+                                 "550e8400-e29b-41d4-a716-446655440000",
+                                 uktextnorm::UncertaintySeverity::Error);
+    expect_uncertain_metadata("invalid UUID variant",
+                              uktextnorm::flag_uncertain("550e8400-e29b-41d4-0716-446655440000"),
+                              "550e8400-e29b-41d4-0716-446655440000",
+                              uktextnorm::UncertaintyCategory::Identifier,
+                              uktextnorm::UncertaintySeverity::Error);
+    expect_no_uncertain_metadata("valid hash length",
+                                 uktextnorm::flag_uncertain("MD5 d41d8cd98f00b204e9800998ecf8427e"),
+                                 "MD5 d41d8cd98f00b204e9800998ecf8427e",
+                                 uktextnorm::UncertaintySeverity::Error);
+    expect_uncertain_metadata("invalid hash length",
+                              uktextnorm::flag_uncertain("MD5 d41d8cd98f00b204"),
+                              "MD5 d41d8cd98f00b204",
+                              uktextnorm::UncertaintyCategory::Identifier,
+                              uktextnorm::UncertaintySeverity::Error);
     expect_uncertain_metadata("uncertain currency metadata",
                               uktextnorm::flag_uncertain("Сума 12 AED."),
                               "12 AED",
+                              uktextnorm::UncertaintyCategory::Currency,
+                              uktextnorm::UncertaintySeverity::Warning);
+    expect_uncertain_metadata("ambiguous numeric date metadata",
+                              uktextnorm::flag_uncertain("Дата 03/04/2026"),
+                              "03/04/2026",
+                              uktextnorm::UncertaintyCategory::Date,
+                              uktextnorm::UncertaintySeverity::Warning);
+    expect_uncertain_metadata("ambiguous colon metadata",
+                              uktextnorm::flag_uncertain("Значення 10:30"),
+                              "10:30",
+                              uktextnorm::UncertaintyCategory::Time,
+                              uktextnorm::UncertaintySeverity::Warning);
+    expect_uncertain_metadata("ambiguous currency symbol metadata",
+                              uktextnorm::flag_uncertain("Сума $12"),
+                              "$12",
                               uktextnorm::UncertaintyCategory::Currency,
                               uktextnorm::UncertaintySeverity::Warning);
     expect_uncertain_metadata("uncertain unit metadata",
@@ -681,6 +823,31 @@ int main(int argc, char** argv)
                               uktextnorm::flag_uncertain("Дата 2026-13-01"),
                               "2026-13-01",
                               uktextnorm::UncertaintyCategory::InvalidDate,
+                              uktextnorm::UncertaintySeverity::Error);
+    expect_uncertain_metadata("invalid ISO week metadata",
+                              uktextnorm::flag_uncertain("Дата 2026-W54-8"),
+                              "2026-W54-8",
+                              uktextnorm::UncertaintyCategory::InvalidDate,
+                              uktextnorm::UncertaintySeverity::Error);
+    expect_uncertain_metadata("invalid ISO ordinal metadata",
+                              uktextnorm::flag_uncertain("Дата 2025-366"),
+                              "2025-366",
+                              uktextnorm::UncertaintyCategory::InvalidDate,
+                              uktextnorm::UncertaintySeverity::Error);
+    expect_uncertain_metadata("invalid timezone offset metadata",
+                              uktextnorm::flag_uncertain("Час UTC+24:00"),
+                              "UTC+24:00",
+                              uktextnorm::UncertaintyCategory::Time,
+                              uktextnorm::UncertaintySeverity::Error);
+    expect_uncertain_metadata("invalid geo URI metadata",
+                              uktextnorm::flag_uncertain("geo:91.2,181.0"),
+                              "geo:91.2,181.0",
+                              uktextnorm::UncertaintyCategory::Coordinate,
+                              uktextnorm::UncertaintySeverity::Error);
+    expect_uncertain_metadata("invalid DMS coordinate metadata",
+                              uktextnorm::flag_uncertain("50°99′00″N"),
+                              "50°99′00″N",
+                              uktextnorm::UncertaintyCategory::Coordinate,
                               uktextnorm::UncertaintySeverity::Error);
     expect_uncertain_metadata("zero denominator metadata",
                               uktextnorm::flag_uncertain("Частка 1/0"),

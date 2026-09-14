@@ -39,7 +39,7 @@ jobs:
           CXX: clang++
           CXXFLAGS: -fsanitize=address,undefined -fno-omit-frame-pointer
           LDFLAGS: -fsanitize=address,undefined
-        run: cmake -S . -B build-sanitize -DCMAKE_BUILD_TYPE=Debug -DNORMALIZE_UK_CPP_BUILD_TESTS=ON
+        run: cmake -S . -B build-sanitize -DCMAKE_BUILD_TYPE=Debug -DNORMALIZE_UK_CPP_BUILD_TESTS=ON -DNORMALIZE_UK_CPP_BUILD_FUZZER=ON
       - name: Build
         run: cmake --build build-sanitize --parallel
       - name: Test
@@ -47,3 +47,5 @@ jobs:
           ASAN_OPTIONS: detect_leaks=1
           UBSAN_OPTIONS: print_stacktrace=1
         run: ctest --test-dir build-sanitize --output-on-failure
+      - name: Fuzzer smoke test
+        run: ./build-sanitize/uktextnorm_fuzzer -runs=1 tests/data/uktextnorm_cli_uncertain_lines.txt
