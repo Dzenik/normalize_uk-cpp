@@ -40,8 +40,9 @@ More examples live in `examples/python/`.
 Normalization covers all 178 active ISO 4217 List One codes, including their
 0-, 2-, 3-, or 4-digit minor-unit rules. More than 70 common cryptocurrency and
 finance tickers have natural Ukrainian readings. Other 2–10 character uppercase
-alphanumeric tickers are spelled out in amounts and market pairs, so newly
-introduced assets do not require an immediate library release. Prefix and suffix
+alphanumeric tickers are spelled out after amounts and when paired with a known
+asset, so newly introduced assets do not require an immediate library release.
+Prefix and suffix
 amounts, localized thousands separators, signs, decimals, and the `₿` symbol
 are supported.
 

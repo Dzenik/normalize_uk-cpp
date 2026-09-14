@@ -7,6 +7,39 @@
 namespace uktextnorm {
 namespace detail {
 
+namespace {
+
+const std::unordered_map<char, std::string>& latin_letter_names()
+{
+    static const std::unordered_map<char, std::string> names = {
+        {'a', "ей"},  {'b', "бі"},     {'c', "сі"},   {'d', "ді"},  {'e', "і"},  {'f', "еф"}, {'g', "джі"},
+        {'h', "ейч"}, {'i', "ай"},     {'j', "джей"}, {'k', "кей"}, {'l', "ел"}, {'m', "ем"}, {'n', "ен"},
+        {'o', "оу"},  {'p', "пі"},     {'q', "к'ю"},  {'r', "ар"},  {'s', "ес"}, {'t', "ті"}, {'u', "ю"},
+        {'v', "ві"},  {'w', "дабл ю"}, {'x', "екс"},  {'y', "вай"}, {'z', "зед"}};
+    return names;
+}
+
+std::string spell_latin_run(std::string_view run)
+{
+    std::vector<std::string> parts;
+    parts.reserve(run.size());
+    for (const char ch : run) {
+        parts.push_back(latin_letter_names().at(static_cast<char>(std::tolower(static_cast<unsigned char>(ch)))));
+    }
+    return join(parts);
+}
+
+std::string read_ascii_digit_run(std::string_view run)
+{
+    if (run.size() > 1 && run.front() == '0') {
+        return number_to_words_digit_by_digit(run);
+    }
+    const auto value = try_parse_ull(run);
+    return value ? number_to_words(*value) : number_to_words_digit_by_digit(run);
+}
+
+} // namespace
+
 std::string normalize_known_acronyms(std::string text)
 {
     static const std::unordered_map<std::string, std::string> map = [] {
@@ -353,7 +386,6 @@ std::string normalize_finance(std::string text, bool include_generic)
         return regex_alternation(std::move(tickers));
     }();
     static const std::string generic_ticker = R"((?![0-9]{2,10}\b)[A-Z0-9]{2,10})";
-    static const std::string generic_prefix_ticker = R"((?![0-9]{3,10}\b)[A-Z0-9]{3,10})";
     static const std::string raw_amount = R"((?:\d{1,3}(?:[ ,. ]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?))";
 
     static const std::regex bitcoin_prefix("₿\\s*([+-]?)(" + raw_amount + ")");
@@ -404,20 +436,29 @@ std::string normalize_finance(std::string text, bool include_generic)
         return text;
     }
     static const std::regex pair("\\b(" + generic_ticker + ")/(" + generic_ticker + ")\\b");
-    text = regex_sub(
-        text, pair, [&](const std::smatch& m) { return ticker_words(m[1].str()) + " до " + ticker_words(m[2].str()); });
-    normalize_amounts(generic_ticker, std::regex::ECMAScript, generic_prefix_ticker);
+    text = regex_sub(text, pair, [&](const std::smatch& m) {
+        const auto is_recognized_ticker = [&](std::string_view ticker) {
+            const auto code = canonical_code(ticker);
+            return finance_units().contains(code) || currency_many(code).has_value();
+        };
+        // An arbitrary A/B token is more often a protocol or standard (TCP/IP,
+        // ISO/IEC) than a market pair.  Use "slash" unless one side anchors the
+        // expression in the finance lexicon.
+        if (!is_recognized_ticker(m[1].str()) && !is_recognized_ticker(m[2].str())) {
+            return ticker_words(m[1].str()) + " слеш " + ticker_words(m[2].str());
+        }
+        return ticker_words(m[1].str()) + " до " + ticker_words(m[2].str());
+    });
+    // Unknown suffix tickers ("5 NEWCOIN") are unambiguous enough to spell.
+    // Unknown prefix tokens are deliberately left alone: "ISO 3166",
+    // "IEEE 802.3", and "ALGOL 58" have the same surface form as "XYZ 5".
+    normalize_amounts(generic_ticker, std::regex::ECMAScript, "(?!)");
     return text;
 }
 std::string normalize_english(std::string text)
 {
     static const std::regex word(R"(\b[A-Za-z][A-Za-z'’-]*\b)");
-    static const std::regex acronym(R"(\b[A-Z]{2,6}\b)");
-    static const std::unordered_map<char, std::string> names = {
-        {'a', "ей"},  {'b', "бі"},     {'c', "сі"},   {'d', "ді"},  {'e', "і"},  {'f', "еф"}, {'g', "джі"},
-        {'h', "ейч"}, {'i', "ай"},     {'j', "джей"}, {'k', "кей"}, {'l', "ел"}, {'m', "ем"}, {'n', "ен"},
-        {'o', "оу"},  {'p', "пі"},     {'q', "к'ю"},  {'r', "ар"},  {'s', "ес"}, {'t', "ті"}, {'u', "ю"},
-        {'v', "ві"},  {'w', "дабл ю"}, {'x', "екс"},  {'y', "вай"}, {'z', "зед"}};
+    static const std::regex acronym(R"(\b[A-Z]+\b)");
     text = regex_sub(text, word, [](const std::smatch& m) {
         const auto low = lower_text(m.str());
         if (const auto it = english_words().find(low); it != english_words().end()) {
@@ -432,7 +473,60 @@ std::string normalize_english(std::string text)
         }
         std::vector<std::string> parts;
         for (char ch : low) {
-            parts.push_back(names.at(ch));
+            parts.push_back(latin_letter_names().at(ch));
+        }
+        return join(parts);
+    });
+}
+
+std::string normalize_technical_alphanumeric(std::string text)
+{
+    static const std::regex internet_protocol(R"(\bIPv([46])\b)", std::regex::icase);
+    text = regex_sub(text, internet_protocol, [](const std::smatch& m) {
+        return "ай пі версії " + read_ascii_digit_run(m[1].str());
+    });
+
+    static const std::regex mobile_generation(R"(\b(\d+)G\b)");
+    text = regex_sub(
+        text, mobile_generation, [](const std::smatch& m) { return read_ascii_digit_run(m[1].str()) + " джі"; });
+
+    static const std::regex dimension(R"(\b(\d+)D\b)");
+    text = regex_sub(text, dimension, [](const std::smatch& m) { return read_ascii_digit_run(m[1].str()) + " ді"; });
+
+    static const std::regex x86_family(R"(\bx(86|64)\b)", std::regex::icase);
+    text = regex_sub(text, x86_family, [](const std::smatch& m) { return "ікс " + read_ascii_digit_run(m[1].str()); });
+
+    static const std::regex english_ordinal(R"(\b(\d+)(?:st|nd|rd|th)\b)", std::regex::icase);
+    text = regex_sub(text, english_ordinal, [](const std::smatch& m) {
+        const auto value = try_parse_ull(m[1].str());
+        return value ? number_to_ordinal_words(*value, "nom") : m.str();
+    });
+
+    static const std::regex mixed(R"(\b[A-Za-z0-9]+\b)");
+    return regex_sub(text, mixed, [](const std::smatch& m) {
+        const auto token = m.str();
+        const bool has_letter = std::ranges::any_of(token, [](unsigned char ch) { return std::isalpha(ch); });
+        const bool has_digit = std::ranges::any_of(token, [](unsigned char ch) { return std::isdigit(ch); });
+        if (!has_letter || !has_digit) {
+            return token;
+        }
+        std::vector<std::string> parts;
+        std::size_t start = 0;
+        while (start < token.size()) {
+            const bool digits = std::isdigit(static_cast<unsigned char>(token[start]));
+            std::size_t stop = start + 1;
+            while (stop < token.size() && std::isdigit(static_cast<unsigned char>(token[stop])) == digits) {
+                ++stop;
+            }
+            const auto run = std::string_view(token).substr(start, stop - start);
+            if (digits) {
+                parts.push_back(read_ascii_digit_run(run));
+            } else if (std::ranges::all_of(run, [](unsigned char ch) { return std::isupper(ch); })) {
+                parts.push_back(spell_latin_run(run));
+            } else {
+                parts.emplace_back(run);
+            }
+            start = stop;
         }
         return join(parts);
     });
@@ -488,6 +582,9 @@ std::string normalize_abbreviations(std::string_view text)
             }
             if (kpos == key.size()) {
                 out += abbreviation_map().at(compact_spaces_lower(std::string_view(text).substr(i, pos - i)));
+                if (key.ends_with('.') && pos == text.size()) {
+                    out.push_back('.');
+                }
                 i = pos;
                 matched = true;
                 break;
@@ -556,6 +653,17 @@ std::string expand_abbreviations(std::string_view text)
 
 std::string transliterate_to_cyrillic(std::string_view text)
 {
+    static const std::unordered_map<char32_t, std::string_view> latin_diacritics = {
+        {U'á', "а"}, {U'à', "а"}, {U'â', "а"},  {U'ã', "а"},  {U'å', "а"},  {U'ā', "а"}, {U'ă', "а"}, {U'ą', "а"},
+        {U'Á', "а"}, {U'À', "а"}, {U'Â', "а"},  {U'Ã', "а"},  {U'Å', "а"},  {U'Ā', "а"}, {U'Ă', "а"}, {U'Ą', "а"},
+        {U'ä', "е"}, {U'Ä', "е"}, {U'é', "е"},  {U'è', "е"},  {U'ê', "е"},  {U'ë', "е"}, {U'ē', "е"}, {U'ė', "е"},
+        {U'ę', "е"}, {U'É', "е"}, {U'È', "е"},  {U'Ê', "е"},  {U'Ë', "е"},  {U'Ē', "е"}, {U'Ė', "е"}, {U'Ę', "е"},
+        {U'í', "і"}, {U'ì', "і"}, {U'î', "і"},  {U'ï', "і"},  {U'ī', "і"},  {U'Í', "і"}, {U'Ì', "і"}, {U'Î', "і"},
+        {U'Ï', "і"}, {U'Ī', "і"}, {U'ó', "о"},  {U'ò', "о"},  {U'ô', "о"},  {U'õ', "о"}, {U'ö', "о"}, {U'ō', "о"},
+        {U'Ó', "о"}, {U'Ò', "о"}, {U'Ô', "о"},  {U'Õ', "о"},  {U'Ö', "о"},  {U'Ō', "о"}, {U'ú', "у"}, {U'ù', "у"},
+        {U'û', "у"}, {U'ū', "у"}, {U'Ú', "у"},  {U'Ù', "у"},  {U'Û', "у"},  {U'Ū', "у"}, {U'ü', "ю"}, {U'Ü', "ю"},
+        {U'ç', "с"}, {U'Ç', "с"}, {U'ñ', "нь"}, {U'Ñ', "нь"}, {U'ß', "сс"}, {U'ł', "л"}, {U'Ł', "л"}, {U'ý', "и"},
+        {U'ÿ', "и"}, {U'Ý', "и"}, {U'Ÿ', "и"}};
     std::string out;
     for (std::size_t i = 0; i < text.size();) {
         std::size_t next = i + 1;
@@ -585,6 +693,9 @@ std::string transliterate_to_cyrillic(std::string_view text)
             } else {
                 out.append(text.substr(i, next - i));
             }
+            i = next;
+        } else if (const auto it = latin_diacritics.find(cp); it != latin_diacritics.end()) {
+            out += it->second;
             i = next;
         } else {
             out.append(text.substr(i, next - i));

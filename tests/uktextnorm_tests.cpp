@@ -154,13 +154,34 @@ int main(int argc, char** argv)
     expect_eq("ordinal ins plural", uktextnorm::number_to_ordinal_words(100, "ins_pl"), "сотими");
     expect_eq("ordinal loc", uktextnorm::number_to_ordinal_words(1000, "loc"), "тисячному");
     expect_eq("case", uktextnorm::number_to_words_case(500, "gen"), "п'ятисот");
-    expect_eq("abbr", uktextnorm::normalize_abbreviations("І т. д. і т. ін."), "і так далі і таке інше");
+    expect_eq("abbr", uktextnorm::normalize_abbreviations("І т. д. і т. ін."), "і так далі і таке інше.");
     expect_eq("acronym", uktextnorm::expand_abbreviations("СБР і НАТО"), "ес бе ер і НАТО");
     expect_eq("transliterate to cyrillic", uktextnorm::transliterate_to_cyrillic("Google shop"), "гугле шоп");
     expect_eq(
         "cyrilize alias", uktextnorm::cyrilize("Google shop"), uktextnorm::transliterate_to_cyrillic("Google shop"));
 
     expect_eq("date", normalize_ukrainian("01.05.2024"), "перше травня дві тисячі двадцять четвертого року");
+    expect_eq("textual date consumes explicit year word",
+              normalize_ukrainian("Подію завершили 1 вересня 1969 року."),
+              "Подію завершили першого вересня тисяча дев'ятсот шістдесят дев'ятого року.");
+    expect_eq("named month year consumes explicit year word",
+              normalize_ukrainian("Дані за березень 2009 року."),
+              "Дані за березень дві тисячі дев'ятого року.");
+    expect_eq("genitive named month year",
+              normalize_ukrainian("За даними березня 2009 року."),
+              "За даними березня дві тисячі дев'ятого року.");
+    expect_eq("instrumental year",
+              normalize_ukrainian("Порівняно із 2018 роком."),
+              "Порівняно із дві тисячі вісімнадцятим роком.");
+    expect_eq("contextual abbreviated year",
+              normalize_ukrainian("У 1993 р. оприлюднили звіт."),
+              "У тисяча дев'ятсот дев'яносто третьому році оприлюднили звіт.");
+    expect_eq("locative month and year",
+              normalize_ukrainian("Подію провели в березні 2001."),
+              "Подію провели в березні дві тисячі першого року.");
+    expect_eq("decade without written suffix",
+              normalize_ukrainian("У 1940 роках створили перші системи."),
+              "У тисяча дев'ятсот сорокових роках створили перші системи.");
     expect_eq("time", normalize_ukrainian("Зустріч о 06:06"), "Зустріч о шість годин шість хвилин");
     expect_eq("currency", normalize_ukrainian("Ціна 12.50 грн"), "Ціна дванадцять гривень п'ятдесят копійок");
     expect_eq("measure", normalize_ukrainian("5 кг і 2 хв"), "п'ять кілограмів і дві хвилини");
@@ -178,7 +199,7 @@ int main(int argc, char** argv)
               normalize_ukrainian("м. Київ, вул. Хрещатик, буд. 1, кв. 7"),
               "місто Київ, вулиця Хрещатик, будинок один, квартира сім");
     expect_eq(
-        "year range", normalize_ukrainian("2020-2024 рр."), "дві тисячі двадцятий дві тисячі двадцять четвертий роки");
+        "year range", normalize_ukrainian("2020-2024 рр."), "дві тисячі двадцятий дві тисячі двадцять четвертий роки.");
     expect_eq("case year", normalize_ukrainian("у 2024 році"), "у дві тисячі двадцять четвертому році");
     expect_eq("ordinal suffix", normalize_ukrainian("1991-го"), "тисяча дев'ятсот дев'яносто першого");
     expect_eq("roman century", normalize_ukrainian("XXI ст."), "двадцять перше століття");
@@ -209,6 +230,15 @@ int main(int argc, char** argv)
     expect_eq("preposition genitive", normalize_ukrainian("до 5 кг"), "до п'яти кілограмів");
     expect_eq("instrumental context", normalize_ukrainian("з 3 друзями"), "з трьома друзями");
     expect_eq("prepositional oblique", normalize_ukrainian("у 4 містах"), "у чотирьох містах");
+    expect_eq("ambiguous preposition with quantity", normalize_ukrainian("у 100 разів"), "у сто разів");
+    expect_eq("accusative quantity after na", normalize_ukrainian("на 49 кубітів"), "на сорок дев'ять кубітів");
+    expect_eq("genitive quantity after sered", normalize_ukrainian("серед 42 творів"), "серед сорока двох творів");
+    expect_eq(
+        "genitive quantity after z", normalize_ukrainian("приблизно з 50 кубітів"), "приблизно з п'ятдесяти кубітів");
+    expect_eq("comparative phrase after governor",
+              normalize_ukrainian("після більш ніж 5 років"),
+              "після більш ніж п'яти років");
+    expect_eq("quantity after ponad", normalize_ukrainian("понад 1200 кубітів"), "понад тисячу двісті кубітів");
     expect_eq("counted masculine noun", normalize_ukrainian("21 користувач"), "двадцять один користувач");
     expect_eq("counted feminine noun", normalize_ukrainian("22 заявки"), "двадцять дві заявки");
     expect_eq("counted neuter noun", normalize_ukrainian("21 місто"), "двадцять одне місто");
@@ -257,9 +287,23 @@ int main(int argc, char** argv)
               "тисяча двісті тридцять чотири гривні п'ятдесят шість копійок");
     expect_eq("dot decimal measure", normalize_ukrainian("2.5 кг"), "дві цілих і п'ять десятих кілограма");
     expect_eq("dot decimal percent", normalize_ukrainian("12.5%"), "дванадцять цілих і п'ять десятих відсотка");
+    expect_eq("genitive governed percent",
+              normalize_ukrainian("Зростання становить близько 67 %."),
+              "Зростання становить близько шістдесяти семи відсотків.");
+    expect_eq("accusative percent increase",
+              normalize_ukrainian("Показник зріс на 33 %."),
+              "Показник зріс на тридцять три відсотки.");
+    expect_eq("genitive percent upper bound",
+              normalize_ukrainian("Частка піднялася до 82 %."),
+              "Частка піднялася до вісімдесяти двох відсотків.");
     expect_eq("dot decimal multiplier currency",
               normalize_ukrainian("1.5 млн грн"),
               "одна ціла і п'ять десятих мільйона гривень");
+    expect_eq("governed multiplier",
+              normalize_ukrainian("близько 327 млн користувачів"),
+              "близько трьохсот двадцяти семи мільйонів користувачів");
+    expect_eq(
+        "terminal multiplier punctuation", normalize_ukrainian("Користувачів 5 млн."), "Користувачів п'ять мільйонів.");
     expect_eq("iban",
               normalize_ukrainian("UA213223130000026007233566001"),
               "айбан ю ей два один три два два три один три нуль нуль нуль нуль нуль два шість нуль нуль сім два три "
@@ -352,6 +396,15 @@ int main(int argc, char** argv)
         "from-to en dash unit range", normalize_ukrainian("5–7 кг", range_options), "від п'яти до семи кілограмів");
     expect_eq(
         "from-to percent range", normalize_ukrainian("10-15%", range_options), "від десяти до п'ятнадцяти відсотків");
+    expect_eq("prepositional year range",
+              normalize_ukrainian("У 1998—2000 роках.", range_options),
+              "від тисяча дев'ятсот дев'яносто восьмого до двохтисячного року.");
+    expect_eq("range after explicit vid",
+              normalize_ukrainian("Енергія менша від 1,5–2 еВ.", range_options),
+              "Енергія менша від однієї цілої і п'яти десятих до двох електронвольтів.");
+    expect_eq("approximate range after ponad",
+              normalize_ukrainian("понад 300—400 рядків", range_options),
+              "понад триста чи чотириста рядків");
     for (const auto input : {"5-7 °C",
                              "5–7 °C",
                              "5—7 °C",
@@ -380,6 +433,12 @@ int main(int argc, char** argv)
               normalize_ukrainian("5–7 ℃ і 8–9 ℉", range_options),
               "від п'яти до семи градусів Цельсія і від восьми до дев'яти градусів Фаренгейта");
     expect_eq("standalone kelvin", normalize_ukrainian("273 K", range_options), "двісті сімдесят три кельвіни");
+    expect_eq("governed kelvin",
+              normalize_ukrainian("Речовину нагріли до 300 K."),
+              "Речовину нагріли до трьохсот кельвінів.");
+    expect_eq("governed celsius",
+              normalize_ukrainian("Температура зросла до 500 °С."),
+              "Температура зросла до п'ятисот градусів Цельсія.");
     expect_eq("unicode kelvin sign", normalize_ukrainian("273 K", range_options), "двісті сімдесят три кельвіни");
     expect_eq("legacy degree kelvin", normalize_ukrainian("273 °K", range_options), "двісті сімдесят три кельвіни");
     expect_eq("kelvin range",
@@ -552,8 +611,25 @@ int main(int argc, char** argv)
     expect_eq("FTP arbitrary TLD",
               normalize_ukrainian("ftp://example.dev/a#b"),
               "фтп двокрапка слеш слеш ексампле крапка дев слеш а решітка б");
+    expect_eq("Ukrainian domain label",
+              normalize_ukrainian("Сайт ts.kiev.ua працює."),
+              "Сайт ц крапка кіев крапка ю ей працює.");
+    expect_eq("standalone Ukrainian ASCII domain",
+              normalize_ukrainian("Домен .UA делеговано."),
+              "Домен крапка ю ей делеговано.");
+    expect_eq("standalone Ukrainian IDN domain",
+              normalize_ukrainian("Домен .укр делеговано."),
+              "Домен крапка укр делеговано.");
     expect_eq("SSML preserved", normalize_ukrainian("<speak>5 кг</speak>"), "<speak>п'ять кілограмів</speak>");
     expect_eq("inline code preserved", normalize_ukrainian("Код `x=5`, вага 2 кг"), "Код `x=5`, вага два кілограми");
+    expect_eq("MediaWiki display math preserved",
+              normalize_ukrainian(R"(Формула {\displaystyle E=mc^{2}}, вага 5 кг.)"),
+              R"(Формула {\displaystyle E=mc^{2}}, вага п'ять кілограмів.)");
+    expect_eq("IPA preserved", normalize_ukrainian("OS МФА: [oʊˈɛs]"), "оу ес МФА: [oʊˈɛs]");
+    expect_eq("Latin diacritics transliterated",
+              normalize_ukrainian("Plankalkül, Vigenère, computār"),
+              "планкалкюл, вігенере, компутар");
+    expect_eq("isolated Latin diacritic transliterated", normalize_ukrainian("Квáнтовий"), "Квантовий");
     expect_eq("Markdown destination and entity preserved",
               normalize_ukrainian("[5 кг](https://example.com/a?x=1&amp;y=2)"),
               "[п'ять кілограмів](https://example.com/a?x=1&amp;y=2)");
@@ -594,7 +670,7 @@ int main(int argc, char** argv)
               "двадцять шостого року");
     expect_eq("year range from-to",
               normalize_ukrainian("2020–2024 рр.", spoken_dates),
-              "від дві тисячі двадцятого до дві тисячі двадцять четвертого року");
+              "від дві тисячі двадцятого до дві тисячі двадцять четвертого року.");
     uktextnorm::NormalizeOptions tts_options;
     tts_options.range_style = uktextnorm::RangeStyle::FromTo;
     tts_options.phone_style = uktextnorm::PhoneStyle::DigitByDigit;
@@ -916,6 +992,18 @@ int main(int argc, char** argv)
     expect_eq("malformed leading-dot ISO duration preserved", normalize_ukrainian("PT.5H", audit_options), "PT.5H");
     expect_eq("invalid ISO duration preserved", normalize_ukrainian("P1DT", audit_options), "P1DT");
     expect_eq("malformed scientific preserved", normalize_ukrainian("1e+", audit_options), "1e+");
+    expect_eq("invalid ISBN preserved",
+              normalize_ukrainian("ISBN 978-617-57-40-11-4", audit_options),
+              "ISBN 978-617-57-40-11-4");
+    expect_eq("HTML code contents preserved",
+              normalize_ukrainian("Формула <code>x = 5</code>, маса 2 кг.", audit_options),
+              "Формула <code>x = 5</code>, маса два кілограми.");
+    const auto normalized_doi = normalize_ukrainian("doi:10.22059/jitm.2024.99052", audit_options);
+    expect_eq("DOI normalization",
+              normalized_doi,
+              "ді оу ай десять крапка двадцять дві тисячі п'ятдесят дев'ять слеш джітм крапка дві тисячі "
+              "двадцять чотири крапка дев'яносто дев'ять тисяч п'ятдесят два");
+    expect_eq("DOI normalization is idempotent", normalize_ukrainian(normalized_doi, audit_options), normalized_doi);
     expect_eq("bracketed IPv6 endpoint",
               normalize_ukrainian("[2001:db8::1]:443", audit_options),
               "ай пі версії шість два нуль нуль один двокрапка ді бі вісім двокрапка скорочення нулів двокрапка один "
@@ -931,6 +1019,57 @@ int main(int argc, char** argv)
     expect_eq("temperature range punctuation",
               normalize_ukrainian("5-7 °C.", audit_options),
               "від п'яти до семи градусів Цельсія.");
+    expect_eq("measurement terminal punctuation",
+              normalize_ukrainian("Відстань становить 100 км.", audit_options),
+              "Відстань становить сто кілометрів.");
+    expect_eq("governed abbreviated measurement with punctuation",
+              normalize_ukrainian("Відстань становить до 2000 м.", audit_options),
+              "Відстань становить до двох тисяч метрів.");
+    expect_eq("bibliographic page count",
+              normalize_ukrainian("Монографія. — 279 с.: іл.", audit_options),
+              "Монографія. — двісті сімдесят дев'ять сторінок: іл.");
+    expect_eq("bibliographic volume count",
+              normalize_ukrainian("Енциклопедія: у 2 т. / ред. Іваненко.", audit_options),
+              "Енциклопедія: у двох томах / ред. Іваненко.");
+    expect_eq("bibliographic singular volume",
+              normalize_ukrainian("Довідник: в 1 т / ред. Іваненко.", audit_options),
+              "Довідник: в одному томі / ред. Іваненко.");
+    expect_eq("single bibliographic page",
+              normalize_ukrainian("Монографія. — С. 896.", audit_options),
+              "Монографія. — сторінка вісімсот дев'яносто шість.");
+    expect_eq("mediawiki question heading",
+              normalize_ukrainian("==== Чи може машина мислити? ====\nТекст відповіді.", audit_options),
+              "Чи може машина мислити?\nТекст відповіді.");
+    expect_eq("compound measurement terminal punctuation",
+              normalize_ukrainian("Швидкість становить 100 Мбіт/с.", audit_options),
+              "Швидкість становить сто мегабітів за секунду.");
+    expect_eq("capitalized kilobit unit",
+              normalize_ukrainian("Швидкість становить 144 Кбіт/с.", audit_options),
+              "Швидкість становить сто сорок чотири кілобіти за секунду.");
+    expect_eq("English tonne unit",
+              normalize_ukrainian("Маса становить 30 tonnes.", audit_options),
+              "Маса становить тридцять тонн.");
+    expect_eq("variable ratio",
+              normalize_ukrainian("Розгалужувач має відношення 1:n.", audit_options),
+              "Розгалужувач має відношення один до ен.");
+    expect_eq("locative number before adjective",
+              normalize_ukrainian("Дані зберігають у 51 публічному домені.", audit_options),
+              "Дані зберігають у п'ятдесяти одному публічному домені.");
+    expect_eq("mediawiki heading delimiters",
+              normalize_ukrainian("== Історія ==\nПерший комп'ютер створили давно.", audit_options),
+              "Історія\nПерший комп'ютер створили давно.");
+    const auto technical_identifiers = normalize_ukrainian(
+        "Протоколи IPv4 і IPv6 працюють у мережі 5G на x86; машини Z3 використовували RC4.", audit_options);
+    expect_eq("technical alphanumeric identifiers",
+              technical_identifiers,
+              "Протоколи ай пі версії чотири і ай пі версії шість працюють у мережі п'ять джі на ікс вісімдесят "
+              "шість; машини зед три використовували ар сі чотири.");
+    expect_eq("technical alphanumeric identifiers are idempotent",
+              normalize_ukrainian(technical_identifiers, audit_options),
+              technical_identifiers);
+    expect_eq("single latin initial is stable",
+              normalize_ukrainian(normalize_ukrainian("Andrew S.", audit_options), audit_options),
+              normalize_ukrainian("Andrew S.", audit_options));
     expect_eq("mixed vulgar fraction", normalize_ukrainian("2½", audit_options), "дві цілих і одна друга");
     expect_eq("measured mixed vulgar fraction",
               normalize_ukrainian("2½ кг", audit_options),
@@ -993,6 +1132,13 @@ int main(int argc, char** argv)
     expect_eq("generic cryptocurrency pair",
               normalize_ukrainian("NEWCOIN/USDT", audit_options),
               "ен і дабл ю сі оу ай ен до тезерів");
+    expect_eq("technical slash acronyms are not finance pairs",
+              normalize_ukrainian("Протоколи TCP/IP та IPX/SPX.", audit_options),
+              "Протоколи ті сі пі слеш ай пі та ай пі екс слеш ес пі екс.");
+    expect_eq("technical acronym numbers keep their order",
+              normalize_ukrainian("Стандарти ISO 3166 та IEEE 802.3; мова ALGOL 58.", audit_options),
+              "Стандарти ай ес оу три тисячі сто шістдесят шість та ай і і і вісімсот два крапка три; мова ей ел "
+              "джі оу ел п'ятдесят вісім.");
     expect_eq(
         "lowercase known cryptocurrency pair", normalize_ukrainian("btc/eth", audit_options), "біткоїнів до ефірів");
 

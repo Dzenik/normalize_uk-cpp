@@ -614,6 +614,19 @@ Action sent_join(const SentSplit& split)
     if (!starts_with_space(split.right)) {
         return Action::Join;
     }
+    const auto first_non_space = split.right.find_first_not_of(" \t\r\n");
+    const auto leading_space = split.right.substr(0, first_non_space);
+    const auto line_start = split.buffer.find_last_of("\r\n");
+    const auto current_line =
+        std::string_view(split.buffer).substr(line_start == std::string_view::npos ? 0 : line_start + 1);
+    const auto heading_start = current_line.find_first_not_of(" \t");
+    if (heading_start != std::string_view::npos && current_line.substr(heading_start).starts_with("==") &&
+        first_non_space != std::string_view::npos && split.right.substr(first_non_space).starts_with("==")) {
+        return Action::Join;
+    }
+    if (leading_space.contains('\n') || leading_space.contains('\r')) {
+        return Action::None;
+    }
     if (starts_with_letter_bullet(split.right)) {
         return Action::None;
     }
@@ -629,6 +642,13 @@ Action sent_join(const SentSplit& split)
     const auto delimiter_cp = decode_one(split.delimiter, 0, dnext);
     const auto left_lower = lower_ascii_ukrainian(last_compound_abbrev_token(split.left).value_or(*left));
     if (split.delimiter == ".") {
+        if (left_lower == "м" || left_lower == "с") {
+            const auto tokens = tokens_in(split.left);
+            if (tokens.size() >= 2 && std::ranges::all_of(codepoints(tokens[tokens.size() - 2]),
+                                                          [](const Cp& cp) { return is_digit(cp.value); })) {
+                return Action::None;
+            }
+        }
         bool skip_single_abbreviation = false;
         if (std::ranges::all_of(codepoints(*left), [](const Cp& cp) { return is_digit(cp.value); }) &&
             std::ranges::all_of(codepoints(*right), [](const Cp& cp) { return is_digit(cp.value); })) {

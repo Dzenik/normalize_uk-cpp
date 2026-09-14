@@ -268,6 +268,21 @@ int main()
     const std::string money = "Компанія залучила 5 млн грн. Це на 12,5% більше, ніж торік.";
     expect_sents("money measurement", money, {"Компанія залучила 5 млн грн.", "Це на 12,5% більше, ніж торік."});
 
+    const std::string measurement_paragraphs =
+        "Відстань до передавача становить 100 м.\nЗагальна кількість вузлів зросла.";
+    expect_sents("measurement abbreviation at newline",
+                 measurement_paragraphs,
+                 {"Відстань до передавача становить 100 м.", "Загальна кількість вузлів зросла."});
+
+    const std::string measurement_sentence_boundary =
+        "Відстань до передавача становить 100 м. Загальна кількість вузлів зросла.";
+    expect_sents("measurement abbreviation before uppercase sentence",
+                 measurement_sentence_boundary,
+                 {"Відстань до передавача становить 100 м.", "Загальна кількість вузлів зросла."});
+
+    const std::string question_heading = "==== Чи може машина мислити? ====\nТекст відповіді.";
+    expect_sents("mediawiki question heading", question_heading, {question_heading});
+
     const std::string soviet_money =
         "Стягнути 62 руб. 59 коп. різниці у частках. Паркан залишити для загального користування.";
     expect_sents("soviet money abbreviation",

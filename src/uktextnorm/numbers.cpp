@@ -65,6 +65,11 @@ std::string number_to_words(unsigned long long n)
 
 std::string number_to_ordinal_words(unsigned long long n, std::string_view form)
 {
+    if (n >= 2000 && n <= 9000 && n % 1000 == 0) {
+        static const std::array<std::string_view, 10> prefixes = {
+            "", "", "двох", "трьох", "чотирьох", "п'яти", "шести", "семи", "восьми", "дев'яти"};
+        return inflect_ordinal(std::string(prefixes[n / 1000]) + "тисячний", form);
+    }
     auto words = split_words(number_to_words(n));
     if (words.empty()) {
         return {};

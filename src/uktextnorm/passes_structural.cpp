@@ -377,6 +377,10 @@ std::string normalize_web(std::string text)
         while (!s.empty() && std::string_view(".,!?").contains(s.back())) {
             s.pop_back();
         }
+        static const std::regex ukrainian_domain_label(R"(\.(ua|укр)(?=$|[/?#]))", std::regex::icase);
+        s = regex_sub(s, ukrainian_domain_label, [](const std::smatch& m) {
+            return lower_text(m[1].str()) == "ua" ? " крапка ю ей " : " крапка укр ";
+        });
         for (const auto& [sym, word] : std::array<std::pair<std::string_view, std::string_view>, 5>{
                  {{"@", " равлик "}, {".", " крапка "}, {"/", " слеш "}, {":", " двокрапка "}, {"-", " дефіс "}}}) {
             replace_all(s, sym, word);
@@ -389,8 +393,15 @@ std::string normalize_web(std::string text)
         replace_all(s, "+", " плюс ");
         return trim_spaces(std::move(s));
     };
+    static const std::regex doi(R"(\bdoi\s*:\s*(10\.\d{4,9}/[-._;()/:A-Za-z0-9]*[A-Za-z0-9]))", std::regex::icase);
+    text = regex_sub(text, doi, [&](const std::smatch& m) { return "ді оу ай " + spell(m[1].str()); });
     text = regex_sub(text, email, [&](const std::smatch& m) { return m[1].str() + spell(m[2].str()); });
     text = regex_sub(text, url, [&](const std::smatch& m) { return spell(m.str()); });
+    static const std::regex standalone_ukrainian_domain(
+        R"((^|[^A-Za-zА-Яа-яЄєІіЇїҐґ0-9])\.(ua|укр)(?![A-Za-zА-Яа-яЄєІіЇїҐґ0-9]))", std::regex::icase);
+    text = regex_sub(text, standalone_ukrainian_domain, [](const std::smatch& m) {
+        return m[1].str() + (lower_text(m[2].str()) == "ua" ? "крапка ю ей" : "крапка укр");
+    });
     text =
         ctre_sub<R"(#([A-Za-zА-Яа-яЄєІіЇїҐґ0-9_]+))">(text, [](const auto& m) { return "хештег " + cap_string<1>(m); });
     static const std::regex handle(R"((^|[^A-Za-zА-Яа-яЄєІіЇїҐґ0-9._%+-])@([A-Za-z][A-Za-z0-9_]{1,30}))");

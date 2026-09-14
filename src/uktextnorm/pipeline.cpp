@@ -23,8 +23,83 @@ std::string protect_opaque_markup(std::string text,
         protected_spans.emplace_back(key, std::move(value));
         return key;
     };
+    // MediaWiki plain-text extracts can retain a TeX serialization after the
+    // rendered formula.  Treat a balanced `\displaystyle` group like code:
+    // partial number/symbol expansion would corrupt it and is not a meaningful
+    // spoken rendering.
+    std::string protected_math;
+    std::size_t math_copied = 0;
+    std::size_t math_search = 0;
+    constexpr std::string_view display_math = R"({\displaystyle)";
+    while (true) {
+        const auto start = text.find(display_math, math_search);
+        if (start == std::string::npos) {
+            break;
+        }
+        std::size_t stop = start;
+        int depth = 0;
+        bool escaped = false;
+        for (; stop < text.size(); ++stop) {
+            const char ch = text[stop];
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (ch == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch == '{') {
+                ++depth;
+            } else if (ch == '}' && --depth == 0) {
+                ++stop;
+                break;
+            }
+        }
+        if (depth != 0) {
+            break;
+        }
+        protected_math.append(text, math_copied, start - math_copied);
+        protected_math += protect(text.substr(start, stop - start));
+        math_copied = stop;
+        math_search = stop;
+    }
+    if (math_copied != 0) {
+        protected_math.append(text, math_copied, std::string::npos);
+        text = std::move(protected_math);
+    }
+    std::string protected_ipa;
+    std::size_t ipa_copied = 0;
+    std::size_t ipa_search = 0;
+    while (true) {
+        const auto start = text.find('[', ipa_search);
+        if (start == std::string::npos) {
+            break;
+        }
+        const auto stop = text.find(']', start + 1);
+        if (stop == std::string::npos || text.find_first_of("\r\n", start + 1) < stop) {
+            break;
+        }
+        const auto candidate = std::string_view(text).substr(start, stop - start + 1);
+        const bool has_ipa = std::ranges::any_of(codepoints(candidate), [](const auto& cp) {
+            return (cp.value >= U'\u0250' && cp.value <= U'\u02FF') || (cp.value >= U'\u1D00' && cp.value <= U'\u1D7F');
+        });
+        if (!has_ipa) {
+            ipa_search = stop + 1;
+            continue;
+        }
+        protected_ipa.append(text, ipa_copied, start - ipa_copied);
+        protected_ipa += protect(text.substr(start, stop - start + 1));
+        ipa_copied = stop + 1;
+        ipa_search = stop + 1;
+    }
+    if (ipa_copied != 0) {
+        protected_ipa.append(text, ipa_copied, std::string::npos);
+        text = std::move(protected_ipa);
+    }
     static const std::regex opaque(
-        R"((<!--[\s\S]*?-->|```[\s\S]*?```|~~~[\s\S]*?~~~|``(?:[^`\r\n]|`(?!`))*``|`[^`\r\n]*`|<[^<>]+>|&(?:#[0-9]+|#[xX][0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]+);))");
+        R"((<!--[\s\S]*?-->|```[\s\S]*?```|~~~[\s\S]*?~~~|``(?:[^`\r\n]|`(?!`))*``|`[^`\r\n]*`|<(code|pre)\b[^>]*>[\s\S]*?</\2\s*>|<[^<>]+>|&(?:#[0-9]+|#[xX][0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]+);))",
+        std::regex::icase);
     text = regex_sub(text, opaque, [&](const std::smatch& m) { return protect(m.str()); });
     // std::regex cannot balance parentheses. Scan Markdown destinations so a
     // URL such as `a_(b)` remains opaque all the way to its matching `)`.
@@ -76,6 +151,11 @@ std::string protect_opaque_markup(std::string text,
     static const std::regex malformed_scientific(R"((^|[^A-Za-z\d])([+\-]?\d+(?:[.,]\d+)?[eE][+\-]?)(?![+\-]?\d))");
     text =
         regex_sub(text, malformed_scientific, [&](const std::smatch& m) { return m[1].str() + protect(m[2].str()); });
+    static const std::regex isbn_candidate(
+        R"(\bISBN(?:-1[03])?\s*[:№#]?\s*((?:97[89][ -]?)?[0-9Xx](?:[ -]?[0-9Xx]){8,12})\b)", std::regex::icase);
+    text = regex_sub(text, isbn_candidate, [&](const std::smatch& m) {
+        return valid_isbn(m[1].str()) ? m.str() : protect(m.str());
+    });
     static const std::regex labelled_hash_candidate(
         R"(\b((?:SHA-?(?:1|224|256|384|512)|SHA3-?(?:256|512)|BLAKE2[bs]|MD5))\s*[:=]?\s*([0-9A-Fa-f]{1,128})\b)",
         std::regex::icase);
@@ -258,6 +338,50 @@ std::string normalize_output_spacing(std::string text)
     return std::regex_replace(text, before_punctuation, "$1");
 }
 
+std::string strip_mediawiki_heading_markup(std::string text)
+{
+    std::string out;
+    out.reserve(text.size());
+    std::size_t start = 0;
+    while (start <= text.size()) {
+        const auto newline = text.find('\n', start);
+        const auto stop = newline == std::string::npos ? text.size() : newline;
+        auto line = std::string_view(text).substr(start, stop - start);
+        auto first = line.find_first_not_of(" \t\r");
+        auto last = line.find_last_not_of(" \t\r");
+        bool stripped = false;
+        if (first != std::string_view::npos && line[first] == '=' && line[last] == '=') {
+            std::size_t left = first;
+            while (left <= last && line[left] == '=') {
+                ++left;
+            }
+            std::size_t right = last + 1;
+            while (right > left && line[right - 1] == '=') {
+                --right;
+            }
+            const auto left_marks = left - first;
+            const auto right_marks = last + 1 - right;
+            if (left_marks >= 2 && left_marks <= 6 && left_marks == right_marks) {
+                const auto content_first = line.find_first_not_of(" \t", left);
+                const auto content_last = right == 0 ? std::string_view::npos : line.find_last_not_of(" \t", right - 1);
+                if (content_first != std::string_view::npos && content_first < right && content_last >= content_first) {
+                    out.append(line.substr(content_first, content_last - content_first + 1));
+                    stripped = true;
+                }
+            }
+        }
+        if (!stripped) {
+            out.append(line);
+        }
+        if (newline == std::string::npos) {
+            break;
+        }
+        out.push_back('\n');
+        start = newline + 1;
+    }
+    return out;
+}
+
 void protect_ambiguous_currency_symbols(std::string& text,
                                         std::vector<std::pair<std::string, std::string>>& protected_spans)
 {
@@ -375,10 +499,13 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
 
     text = normalize_unicode(std::move(text), options.quote_style);
     text = normalize_typography(std::move(text));
+    if (text.contains("==")) {
+        text = strip_mediawiki_heading_markup(std::move(text));
+    }
     if (options.normalize_network_addresses && contains_any(text, ".:-")) {
         text = normalize_ip_addresses(std::move(text));
     }
-    if (maybe_digits() && contains_any_token(text, {"стор.", "Стор.", "с.", "С."})) {
+    if (maybe_digits()) {
         text = normalize_page_ranges(std::move(text), options.range_style);
     }
     if (options.repair_homoglyphs && has_ascii_alpha(text)) {
@@ -436,6 +563,12 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
             text = normalize_medical(std::move(text));
         }
         text = normalize_counted_noun_context(std::move(text));
+        if (text.contains('%')) {
+            text = normalize_percent(std::move(text));
+        }
+        if (contains_any_token(text, {"тис", "млн", "млрд", "трлн"})) {
+            text = normalize_multipliers(std::move(text), true);
+        }
         text = normalize_case_context(std::move(text));
         if (text.contains('.') || maybe_roman()) {
             text = normalize_sections(std::move(text));
@@ -451,9 +584,6 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
         text = normalize_ordinals(std::move(text));
         if (contains_any(text, "/½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅐⅛⅜⅝⅞⅑⅒")) {
             text = normalize_fractions(std::move(text));
-        }
-        if (text.contains('%')) {
-            text = normalize_percent(std::move(text));
         }
         if (maybe_currency()) {
             text = normalize_symbol_currency(std::move(text));
@@ -500,15 +630,16 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
         }
         text = normalize_text_with_numbers(std::move(text));
     }
+    if (has_ascii_alpha(text) && has_ascii_digit(text)) {
+        text = normalize_technical_alphanumeric(std::move(text));
+    }
     if (options.normalize_english_words) {
         if (has_ascii_alpha(text)) {
             text = normalize_english(std::move(text));
         }
     }
     if (options.transliterate_latin) {
-        if (has_ascii_alpha(text)) {
-            text = transliterate_to_cyrillic(text);
-        }
+        text = transliterate_to_cyrillic(text);
     }
     return restore_opaque_markup(normalize_output_spacing(trim_spaces(std::move(text))), protected_spans);
 }

@@ -28,8 +28,8 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   powers, and compact or percentage tolerances.
 - Complete active ISO 4217 List One coverage (178 currency, fund, metal, and reserved codes as published by SIX on
   2026-01-01), including correct 0-, 2-, 3-, and 4-digit minor-unit handling and additional unambiguous symbols.
-- Named readings for more than 70 established fiat/crypto finance tickers, plus an open ticker fallback that spells any new
-  2–10 character uppercase alphanumeric cryptocurrency code in amount and market-pair contexts.
+- Named readings for more than 70 established fiat/crypto finance tickers, plus a conservative fallback that spells a new
+  2–10 character uppercase alphanumeric code after an amount or when paired with a recognized asset.
 - Bitcoin amounts written with the `₿` symbol, both before and after the amount.
 - Crypto amounts with prefix or suffix tickers, localized thousands separators, signs, decimals, and
   case-insensitive known market pairs.
@@ -41,6 +41,7 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Legal ranges for articles, parts, points, subpoints, paragraphs, chapters, tables, and figures.
 - URL support for FTP, arbitrary top-level domains, fragments, Unicode email addresses, and punycode-like labels.
 - Preservation of HTML/SSML tags, comments, fenced code blocks, and inline code during normalization.
+- Preservation of balanced MediaWiki `\displaystyle` TeX expressions during surrounding prose normalization.
 - Preservation of Markdown link destinations, reference URLs, tilde fences, and HTML character entities while visible
   link text remains normalizable.
 - Uncertainty categories for invalid times, fractions, network values, and scientific notation in the C++, Python,
@@ -56,6 +57,7 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Measurement and finance lexicons now define a dedicated decimal agreement form.
 - Finance normalization is generated from the finance lexicon instead of using a fixed ticker list.
 - Unicode token detection now compares complete code points instead of individual UTF-8 bytes.
+- Common Latin diacritics are handled by approximate Cyrillic transliteration, while bracketed IPA remains opaque.
 - Numeric dates governed by `від`, `до`, `з`, `із`, `після`, or `станом на` now use the Ukrainian genitive day form.
 - Sentence-initial numeric governors such as `До`, `Від`, and `Близько` now apply the same grammatical cases as their
   lowercase forms.
@@ -63,6 +65,10 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Golden TSV fixtures are pinned to LF in Git and their readers also accept CRLF checkouts on Windows.
 - IPv6 zero compression is pronounced explicitly as `скорочення нулів`.
 - Soft-stem ordinal inflection now produces forms such as `третя` and `третього`.
+- Technical acronym/version expressions and protocol names such as `ISO 3166`, `IEEE 802.3`, `ALGOL 58`, and `TCP/IP`
+  are no longer misclassified as financial amounts or market pairs.
+- Ukrainian domain names, bibliographic volume counts, locative numeric phrases, variable ratios, common English tonne
+  spellings, and capitalization variants of bit-rate units now receive context-appropriate readings.
 
 ### Fixed
 
