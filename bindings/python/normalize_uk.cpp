@@ -70,7 +70,11 @@ PYBIND11_MODULE(_normalize_uk, m)
         .value("Web", uktextnorm::UncertaintyCategory::Web)
         .value("InvalidDate", uktextnorm::UncertaintyCategory::InvalidDate)
         .value("AmbiguousNumberGrouping", uktextnorm::UncertaintyCategory::AmbiguousNumberGrouping)
-        .value("Agreement", uktextnorm::UncertaintyCategory::Agreement);
+        .value("Agreement", uktextnorm::UncertaintyCategory::Agreement)
+        .value("Time", uktextnorm::UncertaintyCategory::Time)
+        .value("Fraction", uktextnorm::UncertaintyCategory::Fraction)
+        .value("Network", uktextnorm::UncertaintyCategory::Network)
+        .value("Scientific", uktextnorm::UncertaintyCategory::Scientific);
 
     py::enum_<uktextnorm::UncertaintySeverity>(m, "UncertaintySeverity")
         .value("Info", uktextnorm::UncertaintySeverity::Info)

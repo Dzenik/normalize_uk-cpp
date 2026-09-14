@@ -32,6 +32,7 @@ struct Measurement {
     std::string_view one;
     std::string_view few;
     std::string_view many;
+    std::string_view decimal;
     char gender = 'm';
 };
 
@@ -50,6 +51,7 @@ struct Cp {
 
 struct FinanceUnit {
     Forms forms;
+    std::string_view decimal;
     bool feminine = false;
 };
 
@@ -157,6 +159,7 @@ std::string normalize_discourse_dates(std::string text);
 std::string normalize_ordinals(std::string text);
 std::string normalize_quarters(std::string text);
 std::string normalize_page_ranges(std::string text, RangeStyle style);
+std::string normalize_section_ranges(std::string text, RangeStyle style);
 std::string normalize_ranges(std::string text, RangeStyle style);
 std::string normalize_addresses(std::string text);
 std::string normalize_number_groups(std::string text, bool parse_thousand_separators);
@@ -172,6 +175,7 @@ std::string normalize_fractions(std::string text);
 std::string normalize_percent(std::string text);
 std::string normalize_measurements(std::string text);
 std::string normalize_medical(std::string text);
+std::string normalize_scientific(std::string text);
 std::string normalize_symbols(std::string text);
 std::string normalize_math(std::string text);
 std::string normalize_decimals(std::string text);

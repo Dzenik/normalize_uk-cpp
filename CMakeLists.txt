@@ -143,6 +143,18 @@ if(NORMALIZE_UK_CPP_BUILD_TESTS)
         set_tests_properties(uktextnorm_version PROPERTIES
             PASS_REGULAR_EXPRESSION "uktextnorm ${PROJECT_VERSION}"
         )
+        add_test(NAME uktextnorm_cli_temperature
+            COMMAND uktextnorm --preset tts-friendly "5–7 °C"
+        )
+        set_tests_properties(uktextnorm_cli_temperature PROPERTIES
+            PASS_REGULAR_EXPRESSION "від п'яти до семи градусів Цельсія"
+        )
+        add_test(NAME uktextnorm_cli_uncertainty
+            COMMAND uktextnorm --uncertain-json "Час 99:30"
+        )
+        set_tests_properties(uktextnorm_cli_uncertainty PROPERTIES
+            PASS_REGULAR_EXPRESSION "invalid clock time"
+        )
     endif()
 endif()
 

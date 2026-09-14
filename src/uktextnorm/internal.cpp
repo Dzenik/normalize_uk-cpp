@@ -142,7 +142,20 @@ bool has_ascii_alpha(std::string_view text)
 
 bool contains_any(std::string_view text, std::string_view chars)
 {
-    return text.find_first_of(chars) != std::string_view::npos;
+    std::unordered_set<char32_t> candidates;
+    for (std::size_t i = 0; i < chars.size();) {
+        std::size_t next = i + 1;
+        candidates.insert(decode_one(chars, i, next));
+        i = next;
+    }
+    for (std::size_t i = 0; i < text.size();) {
+        std::size_t next = i + 1;
+        if (candidates.contains(decode_one(text, i, next))) {
+            return true;
+        }
+        i = next;
+    }
+    return false;
 }
 
 bool contains_any_token(std::string_view text, std::initializer_list<std::string_view> tokens)
@@ -163,11 +176,11 @@ bool has_roman_candidate(std::string_view text)
 
 bool has_currency_candidate(std::string_view text)
 {
-    return contains_any(text, "$€£₴") ||
-           contains_any_token(text, {"zł", "¥", "元", "Kč", "₺", "₹"}) ||
-           contains_any_token(text, {"грн", "UAH", "USD", "EUR", "GBP", "PLN", "CHF", "JPY", "CNY", "CZK", "CAD", "AUD",
-                                     "SEK", "NOK", "DKK", "TRY", "INR", "долар", "євро", "фунт", "злот", "франк",
-                                     "єн", "юан", "крон", "лір", "руп"});
+    return contains_any(text, "$€£₴₽₩") || contains_any_token(text, {"zł", "¥", "元", "Kč", "₺", "₹", "R$"}) ||
+           contains_any_token(text, {"грн", "UAH", "USD",  "EUR", "GBP", "PLN",   "CHF",  "JPY",  "CNY",  "CZK",
+                                     "CAD", "AUD", "SEK",  "NOK", "DKK", "TRY",   "INR",  "RUB",  "KRW",  "BRL",
+                                     "ZAR", "NZD", "MXN",  "SGD", "HKD", "долар", "євро", "фунт", "злот", "франк",
+                                     "єн",  "юан", "крон", "лір", "руп", "рубл",  "вон",  "реал", "ранд"});
 }
 
 bool has_symbol_candidate(std::string_view text)
@@ -218,7 +231,6 @@ std::vector<Cp> uncertain_word_spans(std::string_view text)
     }
     return spans;
 }
-
 
 void replace_all(std::string& text, std::string_view from, std::string_view to)
 {
@@ -391,8 +403,13 @@ std::vector<std::string> under_thousand(unsigned n)
 
 std::string decimal_to_words(std::string_view int_part, std::string_view frac_part)
 {
-    static const std::unordered_map<std::size_t, std::string_view> places = {
-        {1, "десятих"}, {2, "сотих"}, {3, "тисячних"}, {4, "десятитисячних"}, {5, "стотисячних"}, {6, "мільйонних"}};
+    static const std::unordered_map<std::size_t, std::array<std::string_view, 2>> places = {
+        {1, {"десята", "десятих"}},
+        {2, {"сота", "сотих"}},
+        {3, {"тисячна", "тисячних"}},
+        {4, {"десятитисячна", "десятитисячних"}},
+        {5, {"стотисячна", "стотисячних"}},
+        {6, {"мільйонна", "мільйонних"}}};
     const auto it = places.find(frac_part.size());
     const auto int_value = try_parse_ull(int_part);
     const auto frac_value = try_parse_ull(frac_part);
@@ -404,7 +421,9 @@ std::string decimal_to_words(std::string_view int_part, std::string_view frac_pa
     const auto whole = (*int_value % 10 == 1 && *int_value % 100 != 11) ? "ціла" : "цілих";
     auto frac_words = split_words(number_to_words(*frac_value));
     feminine_last(frac_words);
-    return join(int_words) + " " + whole + " і " + join(frac_words) + " " + std::string(it->second);
+    const bool singular_fraction = *frac_value % 10 == 1 && *frac_value % 100 != 11;
+    return join(int_words) + " " + whole + " і " + join(frac_words) + " " +
+           std::string(it->second[singular_fraction ? 0 : 1]);
 }
 
 const std::unordered_map<std::string, std::string>& abbreviation_map()
@@ -460,7 +479,8 @@ const std::unordered_map<std::string, Measurement>& measurements()
     static const std::unordered_map<std::string, Measurement> map = [] {
         std::unordered_map<std::string, Measurement> out;
         for (const auto& entry : lexicon::kUnits) {
-            out.emplace(std::string(entry.key), Measurement{entry.one, entry.few, entry.many, entry.gender});
+            out.emplace(std::string(entry.key),
+                        Measurement{entry.one, entry.few, entry.many, entry.decimal, entry.gender});
         }
         return out;
     }();
@@ -658,8 +678,19 @@ std::string inflect_ordinal(std::string stem, std::string_view form)
                                                                               {"ins_pl", "ими"},
                                                                               {"loc_f", "ій"}};
     // Soft-stem adjectives (третій) take softened endings.
-    static const std::unordered_map<std::string, std::string_view> soft_endings = {
-        {"gen_f", "ьої"}, {"ins", "ім"}, {"ins_f", "ьою"}, {"ins_pl", "іми"}, {"pl", "іх"}, {"loc_pl", "іх"}};
+    static const std::unordered_map<std::string, std::string_view> soft_endings = {{"nom_n", "є"},
+                                                                                   {"nom_f", "я"},
+                                                                                   {"gen", "ього"},
+                                                                                   {"dat", "ьому"},
+                                                                                   {"prep", "ьому"},
+                                                                                   {"loc", "ьому"},
+                                                                                   {"pl", "іх"},
+                                                                                   {"loc_pl", "іх"},
+                                                                                   {"acc_f", "ю"},
+                                                                                   {"gen_f", "ьої"},
+                                                                                   {"ins", "ім"},
+                                                                                   {"ins_f", "ьою"},
+                                                                                   {"ins_pl", "іми"}};
     const auto it = endings.find(std::string(form));
     if (it == endings.end()) {
         return stem;
@@ -891,7 +922,7 @@ std::string read_measurement_quantity(std::string_view num, const Measurement& m
     const auto pos = num.find_first_of(".,");
     if (pos != std::string_view::npos) {
         auto words = decimal_to_words(num.substr(0, pos), num.substr(pos + 1));
-        return words.empty() ? std::string(num) : words + " " + std::string(meas.few);
+        return words.empty() ? std::string(num) : words + " " + std::string(meas.decimal);
     }
     const auto n = try_parse_ull(num);
     if (!n) {
@@ -908,7 +939,8 @@ const std::unordered_map<std::string, FinanceUnit>& finance_units()
     static const std::unordered_map<std::string, FinanceUnit> map = [] {
         std::unordered_map<std::string, FinanceUnit> out;
         for (const auto& entry : lexicon::kFinanceUnits) {
-            out.emplace(std::string(entry.code), FinanceUnit{{entry.one, entry.few, entry.many}, entry.feminine});
+            out.emplace(std::string(entry.code),
+                        FinanceUnit{{entry.one, entry.few, entry.many}, entry.decimal, entry.feminine});
         }
         return out;
     }();
@@ -928,7 +960,7 @@ std::string finance_amount_words(std::string amount, const FinanceUnit& unit)
     if (pos != std::string::npos) {
         auto words =
             decimal_to_words(std::string_view(amount).substr(0, pos), std::string_view(amount).substr(pos + 1));
-        return words.empty() ? amount : words + " " + std::string(unit.forms[2]);
+        return words.empty() ? amount : words + " " + std::string(unit.decimal);
     }
     const auto n = parse_ull(amount);
     auto words = split_words(number_to_words(n));
@@ -939,6 +971,7 @@ std::string finance_amount_words(std::string amount, const FinanceUnit& unit)
 }
 std::string normalize_phone_number(std::string_view phone, PhoneStyle style)
 {
+    const bool international_access = phone.starts_with("00");
     std::string digits;
     std::vector<std::string> groups;
     std::string current_group;
@@ -954,11 +987,20 @@ std::string normalize_phone_number(std::string_view phone, PhoneStyle style)
     if (!current_group.empty()) {
         groups.push_back(current_group);
     }
+    if (international_access) {
+        digits.erase(0, std::min<std::size_t>(2, digits.size()));
+        if (!groups.empty()) {
+            groups.front().erase(0, std::min<std::size_t>(2, groups.front().size()));
+            if (groups.front().empty()) {
+                groups.erase(groups.begin());
+            }
+        }
+    }
     if (digits.size() == 10 && digits[0] == '0') {
         digits = "38" + digits;
     }
     if (digits.size() != 12 || !digits.starts_with("380")) {
-        if (!phone.starts_with('+') || digits.size() < 7 || digits.size() > 15) {
+        if ((!phone.starts_with('+') && !international_access) || digits.size() < 7 || digits.size() > 15) {
             return std::string(phone);
         }
         std::vector<std::string> parts = {"плюс"};

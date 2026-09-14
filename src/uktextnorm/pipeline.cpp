@@ -8,6 +8,32 @@ namespace uktextnorm {
 
 using namespace detail;
 
+namespace {
+
+std::string protect_opaque_markup(std::string text, std::vector<std::pair<std::string, std::string>>& protected_spans)
+{
+    static const std::regex opaque(R"((<!--[\s\S]*?-->|```[\s\S]*?```|`[^`\r\n]*`|<[^<>]+>))");
+    return regex_sub(text, opaque, [&](const std::smatch& m) {
+        std::string key;
+        append_utf8(key, U'\uE000');
+        append_utf8(key, static_cast<char32_t>(U'\uE100' + protected_spans.size()));
+        append_utf8(key, U'\uE001');
+        protected_spans.emplace_back(key, m.str());
+        return key;
+    });
+}
+
+std::string restore_opaque_markup(std::string text,
+                                  const std::vector<std::pair<std::string, std::string>>& protected_spans)
+{
+    for (const auto& [key, value] : protected_spans) {
+        replace_all(text, key, value);
+    }
+    return text;
+}
+
+} // namespace
+
 NormalizeOptions options_for_preset(NormalizePreset preset)
 {
     NormalizeOptions options;
@@ -56,7 +82,8 @@ std::string normalize_ukrainian_with_preset(std::string_view input, NormalizePre
 
 std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& options)
 {
-    std::string text(input);
+    std::vector<std::pair<std::string, std::string>> protected_spans;
+    std::string text = protect_opaque_markup(std::string(input), protected_spans);
     const auto maybe_digits = [&] { return has_ascii_digit(text); };
     const auto maybe_roman = [&] { return has_roman_candidate(text); };
     const auto maybe_currency = [&] { return has_currency_candidate(text); };
@@ -69,10 +96,21 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
     if (options.repair_homoglyphs && has_ascii_alpha(text)) {
         text = normalize_homoglyphs(std::move(text));
     }
-    if (contains_any(text, "@#") ||
-        contains_any_token(
-            text,
-            {"http://", "https://", "www.", ".com", ".ua", ".org", ".net", ".info", ".io", ".edu", ".gov", ".укр"})) {
+    if (contains_any(text, "@#") || (has_ascii_alpha(text) && text.contains('.')) ||
+        contains_any_token(text,
+                           {"http://",
+                            "https://",
+                            "ftp://",
+                            "www.",
+                            ".com",
+                            ".ua",
+                            ".org",
+                            ".net",
+                            ".info",
+                            ".io",
+                            ".edu",
+                            ".gov",
+                            ".укр"})) {
         text = normalize_web(std::move(text));
     }
     if (contains_any_token(text, {"кв.", "квартал"}) || maybe_roman()) {
@@ -82,14 +120,16 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
         text = normalize_addresses(std::move(text));
     }
     text = normalize_abbreviations(text);
+    if (options.normalize_network_addresses && contains_any(text, ".:")) {
+        text = normalize_ip_addresses(std::move(text));
+    }
     if (maybe_digits()) {
         text = normalize_number_groups(std::move(text), options.parse_thousand_separators);
-        if (options.normalize_network_addresses && contains_any(text, ".:")) {
-            text = normalize_ip_addresses(std::move(text));
-        }
         text = normalize_identifiers(std::move(text));
-        text = normalize_ranges(std::move(text), options.range_style);
+        text = normalize_scientific(std::move(text));
         text = normalize_dates(std::move(text), options.date_style, options.validate_dates, options.range_style);
+        text = normalize_section_ranges(std::move(text), options.range_style);
+        text = normalize_ranges(std::move(text), options.range_style);
         text = normalize_discourse_dates(std::move(text));
         if (contains_any(text, "/°№℃℉K") ||
             contains_any_token(text, {"мм рт", "раз", "тиск", "градус", "K", "К", "кельвін"})) {
@@ -115,9 +155,7 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
         if (text.contains('%')) {
             text = normalize_percent(std::move(text));
         }
-        if (contains_any(text, "°′″")) {
-            text = normalize_coordinates(std::move(text));
-        }
+        text = normalize_coordinates(std::move(text));
         if (maybe_currency()) {
             text = normalize_symbol_currency(std::move(text));
         }
@@ -128,7 +166,8 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
     } else if (maybe_roman()) {
         text = normalize_ordinals(std::move(text));
     }
-    if (contains_any_token(text, {"BTC", "ETH", "USDT", "BNB", "USD", "EUR", "GBP", "UAH"})) {
+    if (contains_any_token(text,
+                           {"BTC", "ETH", "USDT", "BNB", "SOL", "XRP", "ADA", "DOGE", "USD", "EUR", "GBP", "UAH"})) {
         text = normalize_finance(std::move(text));
     }
     if (options.expand_known_acronyms) {
@@ -172,7 +211,7 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
             text = transliterate_to_cyrillic(text);
         }
     }
-    return trim_spaces(std::move(text));
+    return restore_opaque_markup(trim_spaces(std::move(text)), protected_spans);
 }
 
 std::vector<UncertainSpan> flag_uncertain(std::string_view text)
@@ -220,6 +259,18 @@ std::vector<UncertainSpan> flag_uncertain(std::string_view text)
                 UncertaintySeverity::Error);
         }
     });
+    static const std::regex invalid_iso_date(R"((^|[^\d])(\d{4})-(\d{1,2})(?:-(\d{1,2}))?(?!\d))");
+    for (std::sregex_iterator it(input.begin(), input.end(), invalid_iso_date), end; it != end; ++it) {
+        const auto year = parse_int((*it)[2].str());
+        const auto month = parse_int((*it)[3].str());
+        const auto day = (*it)[4].matched ? parse_int((*it)[4].str()) : 1;
+        if (month >= 1 && month <= 12 && (!(*it)[4].matched || is_valid_date(day, month, year))) {
+            continue;
+        }
+        const auto s = static_cast<std::size_t>((*it).position(2));
+        const auto e = static_cast<std::size_t>((*it).position(0) + (*it).length(0));
+        add(s, e, "invalid ISO date", UncertaintyCategory::InvalidDate, UncertaintySeverity::Error);
+    }
     ctre_each<R"((^|[^\d.,])(\d{1,3},\d{3})(?![\d]))">(input, [&](const auto& m) {
         const auto s = cap_pos<2>(input, m);
         add(s,
@@ -228,6 +279,63 @@ std::vector<UncertainSpan> flag_uncertain(std::string_view text)
             UncertaintyCategory::AmbiguousNumberGrouping,
             UncertaintySeverity::Warning);
     });
+    static const std::regex invalid_time(R"((^|[^\d:])(\d{1,3}):(\d{2})(?::(\d{2}))?(?![\d:]))");
+    for (std::sregex_iterator it(input.begin(), input.end(), invalid_time), end; it != end; ++it) {
+        const auto hour = parse_int((*it)[2].str());
+        const auto minute = parse_int((*it)[3].str());
+        const auto second = (*it)[4].matched ? parse_int((*it)[4].str()) : 0;
+        if ((hour <= 23 || (hour == 24 && minute == 0 && second == 0)) && minute <= 59 && second <= 59) {
+            continue;
+        }
+        const auto s = static_cast<std::size_t>((*it).position(2));
+        const auto e = static_cast<std::size_t>((*it).position(0) + (*it).length(0));
+        add(s, e, "invalid clock time", UncertaintyCategory::Time, UncertaintySeverity::Error);
+    }
+    static const std::regex invalid_ampm(R"((^|[^\d:])(\d{1,2}):([0-5]\d)(?::([0-5]\d))?\s*(AM|PM)(?![A-Za-z]))",
+                                         std::regex::icase);
+    for (std::sregex_iterator it(input.begin(), input.end(), invalid_ampm), end; it != end; ++it) {
+        const auto hour = parse_int((*it)[2].str());
+        if (hour >= 1 && hour <= 12) {
+            continue;
+        }
+        const auto s = static_cast<std::size_t>((*it).position(2));
+        const auto e = static_cast<std::size_t>((*it).position(0) + (*it).length(0));
+        add(s, e, "invalid 12-hour clock time", UncertaintyCategory::Time, UncertaintySeverity::Error);
+    }
+    static const std::regex zero_fraction(R"((^|[^\d/])([+\-−]?\d+/0+)(?!\d))");
+    for (std::sregex_iterator it(input.begin(), input.end(), zero_fraction), end; it != end; ++it) {
+        const auto s = static_cast<std::size_t>((*it).position(2));
+        add(s,
+            s + (*it)[2].length(),
+            "fraction has a zero denominator",
+            UncertaintyCategory::Fraction,
+            UncertaintySeverity::Error);
+    }
+    static const std::regex malformed_scientific(R"((^|[^A-Za-z\d])([+\-]?\d+(?:[.,]\d+)?[eE][+\-]?)(?!\d))");
+    for (std::sregex_iterator it(input.begin(), input.end(), malformed_scientific), end; it != end; ++it) {
+        const auto s = static_cast<std::size_t>((*it).position(2));
+        add(s,
+            s + (*it)[2].length(),
+            "malformed scientific notation",
+            UncertaintyCategory::Scientific,
+            UncertaintySeverity::Warning);
+    }
+    static const std::regex ipv4_like(
+        R"((^|[^\d.])(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?:/(\d{1,3}))?(?::(\d{1,6}))?(?![\d.]))");
+    for (std::sregex_iterator it(input.begin(), input.end(), ipv4_like), end; it != end; ++it) {
+        bool invalid = false;
+        for (std::size_t i = 2; i <= 5; ++i) {
+            invalid = invalid || parse_int((*it)[i].str()) > 255;
+        }
+        invalid = invalid || ((*it)[6].matched && parse_int((*it)[6].str()) > 32) ||
+                  ((*it)[7].matched && parse_int((*it)[7].str()) > 65535);
+        if (!invalid) {
+            continue;
+        }
+        const auto s = static_cast<std::size_t>((*it).position(2));
+        const auto e = static_cast<std::size_t>((*it).position(0) + (*it).length(0));
+        add(s, e, "invalid IP address, CIDR prefix, or port", UncertaintyCategory::Network, UncertaintySeverity::Error);
+    }
     static const std::unordered_map<std::string, std::string> multisense = {
         {"р", "рік / рядок / річка"},
         {"м", "метр / місто"},
@@ -320,7 +428,7 @@ std::vector<UncertainSpan> flag_uncertain(std::string_view text)
         }
     });
     static const std::regex identifier(
-        R"((?:№\s*[A-Za-zА-Яа-яЄєІіЇїҐґ0-9]+(?:[-/][A-Za-zА-Яа-яЄєІіЇїҐґ0-9]+)+|(?:ЄДРПОУ|РНОКПП|ІПН|ЄРДР)\.?\s*[:№#]?\s*\d{6,20}|паспорт\s+[A-Za-zА-Яа-яЄєІіЇїҐґ]{2}\s*\d{6,9}|(?:картка|картку|карта|карту)\s*\d{4}[\s-]+(?:(?:\*{4}|xxxx|XXXX)[\s-]+(?:\*{4}|xxxx|XXXX)|\d{4}[\s-]+\d{4})[\s-]+\d{4}))",
+        R"((?:№\s*[A-Za-zА-Яа-яЄєІіЇїҐґ0-9]+(?:[-/][A-Za-zА-Яа-яЄєІіЇїҐґ0-9]+)+|(?:ЄДРПОУ|РНОКПП|ІПН|ЄРДР)\.?\s*[:№#]?\s*\d{6,20}|паспорт\s+[A-Za-zА-Яа-яЄєІіЇїҐґ]{2}\s*\d{6,9}|(?:картка|картку|карта|карту)\s*\d{4}[\s-]+(?:(?:\*{4}|xxxx|XXXX)[\s-]+(?:\*{4}|xxxx|XXXX)|\d{4}[\s-]+\d{4})[\s-]+\d{4}|\b[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}\b|\b(?:ISBN|ISSN|VIN|SWIFT|BIC)\b\s*[:№#]?\s*[A-Z0-9 -]{8,32}))",
         std::regex::icase);
     for (std::sregex_iterator it(input.begin(), input.end(), identifier), end; it != end; ++it) {
         add((*it).position(),
@@ -346,7 +454,7 @@ std::vector<UncertainSpan> flag_uncertain(std::string_view text)
             UncertaintySeverity::Warning);
     }
     static const std::regex unsupported_currency(
-        R"((^|[^\dA-Za-zА-Яа-яЄєІіЇїҐґ])(\d+(?:[.,]\d+)?)\s*(RUB|KRW|BRL|ZAR|₽|₩)(?![A-Za-zА-Яа-яЄєІіЇїҐґ]))",
+        R"((^|[^\dA-Za-zА-Яа-яЄєІіЇїҐґ])(\d+(?:[.,]\d+)?)\s*(AED|SAR|ILS|THB|IDR|MYR)(?![A-Za-zА-Яа-яЄєІіЇїҐґ]))",
         std::regex::icase);
     for (std::sregex_iterator it(input.begin(), input.end(), unsupported_currency), end; it != end; ++it) {
         const auto s = static_cast<std::size_t>((*it).position(2));
@@ -358,9 +466,22 @@ std::vector<UncertainSpan> flag_uncertain(std::string_view text)
             UncertaintySeverity::Warning);
     }
     static const std::unordered_set<std::string> known_unit_words = [] {
-        std::unordered_set<std::string> out = {"грн", "коп", "btc",  "eth",  "usdt", "bnb",  "тис",
-                                               "млн", "млрд", "трлн", "рік",  "року", "році", "раз",
-                                               "рази", "разів"};
+        std::unordered_set<std::string> out = {"грн",
+                                               "коп",
+                                               "btc",
+                                               "eth",
+                                               "usdt",
+                                               "bnb",
+                                               "тис",
+                                               "млн",
+                                               "млрд",
+                                               "трлн",
+                                               "рік",
+                                               "року",
+                                               "році",
+                                               "раз",
+                                               "рази",
+                                               "разів"};
         for (const auto& entry : lexicon::kCurrencies) {
             out.insert(lower_text(entry.code));
             out.insert(lower_text(entry.main_one));
@@ -407,7 +528,7 @@ std::vector<UncertainSpan> flag_uncertain(std::string_view text)
     static const std::regex cue_after("^\\s*(?:" + unit_alt() + R"(|%|грн|коп|рік|року|році|тис|млн|млрд|[-–—]))",
                                       std::regex::icase);
     static const std::unordered_set<std::string> governors = {
-        "близько", "понад", "менше", "більше", "від", "до",  "із", "з",  "без", "після",
+        "близько", "понад", "менше", "більше", "від", "до",  "із",  "з",   "без",   "після",
         "к",       "у",     "в",     "о",      "об",  "при", "над", "під", "перед", "між"};
     ctre_each<R"((^|[^\d.,:%\-])(\d{1,4})(?![\d.,:%/\-]))">(input, [&](const auto& m) {
         const auto s = cap_pos<2>(input, m);

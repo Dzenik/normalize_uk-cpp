@@ -104,5 +104,15 @@ int main()
         exercise_one(name, text);
     }
 
+    const std::vector<std::string> idempotent_cases = {
+        "5 кг", "2026-09", "10.0.0.0/24", "0.5 DOGE", "<speak>5 кг</speak>", "6.02×10²³", "ст. 5–7", "-1/2"};
+    for (const auto& text : idempotent_cases) {
+        const auto once = uktextnorm::normalize_ukrainian(text, uktextnorm::NormalizePreset::TtsFriendly);
+        const auto twice = uktextnorm::normalize_ukrainian(once, uktextnorm::NormalizePreset::TtsFriendly);
+        if (once != twice) {
+            fail("idempotence", text + " normalized differently on the second pass");
+        }
+    }
+
     return failures == 0 ? 0 : 1;
 }

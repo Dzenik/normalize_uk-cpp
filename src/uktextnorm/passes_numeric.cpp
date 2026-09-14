@@ -83,8 +83,13 @@ signed_number_words(std::string_view token, std::string_view grammatical_case, c
 
     const auto integer = try_parse_ull(token.substr(0, pos));
     const auto fraction = try_parse_ull(token.substr(pos + 1));
-    static const std::unordered_map<std::size_t, std::string_view> places = {
-        {1, "десятих"}, {2, "сотих"}, {3, "тисячних"}, {4, "десятитисячних"}, {5, "стотисячних"}, {6, "мільйонних"}};
+    static const std::unordered_map<std::size_t, std::array<std::string_view, 2>> places = {
+        {1, {"десятої", "десятих"}},
+        {2, {"сотої", "сотих"}},
+        {3, {"тисячної", "тисячних"}},
+        {4, {"десятитисячної", "десятитисячних"}},
+        {5, {"стотисячної", "стотисячних"}},
+        {6, {"мільйонної", "мільйонних"}}};
     const auto place = places.find(token.size() - pos - 1);
     if (!integer || !fraction || place == places.end()) {
         return std::nullopt;
@@ -97,7 +102,8 @@ signed_number_words(std::string_view token, std::string_view grammatical_case, c
     const auto integer_words = join(number_words_for_case(*integer, "gen", 'f'));
     const auto fraction_words = join(number_words_for_case(*fraction, "gen", 'f'));
     const auto whole = *integer % 10 == 1 && *integer % 100 != 11 ? " цілої і " : " цілих і ";
-    return sign + integer_words + whole + fraction_words + " " + std::string(place->second);
+    const bool singular_fraction = *fraction % 10 == 1 && *fraction % 100 != 11;
+    return sign + integer_words + whole + fraction_words + " " + std::string(place->second[singular_fraction ? 0 : 1]);
 }
 
 enum class TemperatureScaleKind {
@@ -312,12 +318,99 @@ std::string normalize_dates(std::string text, DateStyle style, bool validate, Ra
         }
         return token;
     };
+    auto month_nominative = [](std::string token) {
+        replace_all(token, ".", "");
+        token = lower_text(token);
+        static const std::unordered_map<std::string, std::string_view> names = {
+            {"січ", "січень"},         {"січень", "січень"},     {"січня", "січень"},     {"лют", "лютий"},
+            {"лютий", "лютий"},        {"лютого", "лютий"},      {"бер", "березень"},     {"березень", "березень"},
+            {"березня", "березень"},   {"квіт", "квітень"},      {"квітень", "квітень"},  {"квітня", "квітень"},
+            {"трав", "травень"},       {"травень", "травень"},   {"травня", "травень"},   {"черв", "червень"},
+            {"червень", "червень"},    {"червня", "червень"},    {"лип", "липень"},       {"липень", "липень"},
+            {"липня", "липень"},       {"серп", "серпень"},      {"серпень", "серпень"},  {"серпня", "серпень"},
+            {"вер", "вересень"},       {"вересень", "вересень"}, {"вересня", "вересень"}, {"жовт", "жовтень"},
+            {"жовтень", "жовтень"},    {"жовтня", "жовтень"},    {"лист", "листопад"},    {"листопад", "листопад"},
+            {"листопада", "листопад"}, {"груд", "грудень"},      {"грудень", "грудень"},  {"грудня", "грудень"}};
+        if (const auto it = names.find(token); it != names.end()) {
+            return std::string(it->second);
+        }
+        return token;
+    };
     auto day_words = [style](std::string_view day, std::string_view formal_form = "nom_n") {
         return number_to_ordinal_words(parse_ull(day), style == DateStyle::Spoken ? "gen" : formal_form);
     };
     auto range_day_words = [&](std::string_view day) {
         return range_style == RangeStyle::FromTo ? number_to_ordinal_words(parse_ull(day), "gen") : day_words(day);
     };
+    auto expand_short_year = [](std::string_view year) {
+        const auto value = parse_ull(year);
+        return year.size() == 2 ? (value < 50 ? 2000ULL + value : 1900ULL + value) : value;
+    };
+    auto full_date_words = [&](std::string_view day, std::string_view month, std::string_view year) {
+        const auto day_value = parse_int(day);
+        const auto month_value = parse_int(month);
+        const auto year_value = expand_short_year(year);
+        if (month_value < 1 || month_value > 12 ||
+            (validate && !is_valid_date(day_value, month_value, static_cast<int>(year_value)))) {
+            return std::optional<std::string>{};
+        }
+        return std::optional<std::string>{day_words(day) + " " + std::string(months[month_value - 1]) + " " +
+                                          number_to_ordinal_words(year_value, "gen") + " року"};
+    };
+    auto time_words = [](int hour, int minute, std::optional<int> second = std::nullopt) {
+        std::string out = hours_words(hour);
+        if (minute) {
+            out += " " + minutes_words(minute);
+        }
+        if (second && *second) {
+            out += " " + minutes_words(*second, {"секунда", "секунди", "секунд"});
+        }
+        return out;
+    };
+
+    static const std::regex iso_datetime(
+        R"(\b(\d{4})-(\d{2})-(\d{2})[Tt ](\d{2}):([0-5]\d)(?::([0-5]\d))?(?:(Z)|(?:(UTC|GMT)\s*)?([+-])(\d{2})(?::?(\d{2}))?)?(?![A-Za-z0-9:+-]))",
+        std::regex::icase);
+    text = regex_sub(text, iso_datetime, [&](const std::smatch& m) {
+        const auto date = full_date_words(m[3].str(), m[2].str(), m[1].str());
+        const auto hour = parse_int(m[4].str());
+        if (!date || hour > 23) {
+            return m.str();
+        }
+        std::string out = *date + " о " +
+                          time_words(hour,
+                                     parse_int(m[5].str()),
+                                     m[6].matched ? std::optional<int>(parse_int(m[6].str())) : std::nullopt);
+        if (m[7].matched) {
+            out += " за всесвітнім координованим часом";
+        } else if (m[9].matched) {
+            const auto offset_hour = parse_int(m[10].str());
+            const auto offset_minute = m[11].matched ? parse_int(m[11].str()) : 0;
+            if (offset_hour > 23 || offset_minute > 59) {
+                return m.str();
+            }
+            out += " за часовим поясом " + std::string(m[9].str() == "+" ? "плюс " : "мінус ") +
+                   number_to_words(static_cast<unsigned long long>(offset_hour)) + " " +
+                   plural(static_cast<unsigned long long>(offset_hour), {"година", "години", "годин"});
+            if (offset_minute) {
+                out += " " + minutes_words(offset_minute);
+            }
+        }
+        return out;
+    });
+
+    static const std::regex cross_month_range("\\b(\\d{1,2})\\s+(" + month_alt() +
+                                              ")\\s*(?:-|−|–|—)\\s*(\\d{1,2})\\s+(" + month_alt() +
+                                              R"()(?:\s+(\d{4}))?(?![\dА-Яа-яЄєІіЇїҐґ]))");
+    text = regex_sub(text, cross_month_range, [&](const std::smatch& m) {
+        const auto low = number_to_ordinal_words(parse_ull(m[1].str()), "gen") + " " + month_name(m[2].str());
+        const auto high = number_to_ordinal_words(parse_ull(m[3].str()), "gen") + " " + month_name(m[4].str());
+        auto out = range_connector(range_style, low, high);
+        if (m[5].matched) {
+            out += " " + number_to_ordinal_words(parse_ull(m[5].str()), "gen") + " року";
+        }
+        return out;
+    });
     text = regex_sub(text, date_day_range_re(), [&](const std::smatch& m) {
         const auto low = number_to_ordinal_words(parse_ull(m[1].str()), "gen");
         const auto high = number_to_ordinal_words(parse_ull(m[2].str()), "gen");
@@ -359,6 +452,26 @@ std::string normalize_dates(std::string text, DateStyle style, bool validate, Ra
                           number_to_ordinal_words(parse_ull(m[4].str()), "gen") + " року";
         return range_connector(range_style, low, high);
     });
+    static const std::regex dmy_dash(R"(\b(\d{1,2})-(\d{1,2})-(\d{2}|\d{4})\b)");
+    text = regex_sub(text, dmy_dash, [&](const std::smatch& m) {
+        const auto out = full_date_words(m[1].str(), m[2].str(), m[3].str());
+        return out ? *out : m.str();
+    });
+    static const std::regex dmy_short_dot(R"(\b(\d{1,2})\.(\d{1,2})\.(\d{2})\b)");
+    text = regex_sub(text, dmy_short_dot, [&](const std::smatch& m) {
+        const auto out = full_date_words(m[1].str(), m[2].str(), m[3].str());
+        return out ? *out : m.str();
+    });
+    static const std::regex dmy_short_slash(R"(\b(\d{1,2})/(\d{1,2})/(\d{2})\b)");
+    text = regex_sub(text, dmy_short_slash, [&](const std::smatch& m) {
+        const auto out = full_date_words(m[1].str(), m[2].str(), m[3].str());
+        return out ? *out : m.str();
+    });
+    static const std::regex ymd_slash(R"(\b(\d{4})/(\d{1,2})/(\d{1,2})\b)");
+    text = regex_sub(text, ymd_slash, [&](const std::smatch& m) {
+        const auto out = full_date_words(m[3].str(), m[2].str(), m[1].str());
+        return out ? *out : m.str();
+    });
     text = ctre_sub<R"(\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b)">(text, [&](const auto& m) {
         const int month = parse_int(cap<2>(m));
         if (month < 1 || month > 12) {
@@ -392,6 +505,24 @@ std::string normalize_dates(std::string text, DateStyle style, bool validate, Ra
         return day_words(cap<3>(m)) + " " + std::string(months[month - 1]) + " " +
                number_to_ordinal_words(parse_ull(cap<1>(m)), "gen") + " року";
     });
+    static const std::regex year_month(R"(\b(\d{4})-(0?[1-9]|1[0-2])(?!-?\d))");
+    text = regex_sub(text, year_month, [&](const std::smatch& m) {
+        const auto month = static_cast<std::size_t>(parse_int(m[2].str()));
+        static const std::array<std::string_view, 12> nominative = {"січень",
+                                                                    "лютий",
+                                                                    "березень",
+                                                                    "квітень",
+                                                                    "травень",
+                                                                    "червень",
+                                                                    "липень",
+                                                                    "серпень",
+                                                                    "вересень",
+                                                                    "жовтень",
+                                                                    "листопад",
+                                                                    "грудень"};
+        return std::string(nominative[month - 1]) + " " + number_to_ordinal_words(parse_ull(m[1].str()), "gen") +
+               " року";
+    });
     text = regex_sub(text, date_spelled_re(), [](const std::smatch& m) {
         auto token = m[2].str();
         replace_all(token, ".", "");
@@ -407,6 +538,23 @@ std::string normalize_dates(std::string text, DateStyle style, bool validate, Ra
         const auto month = it == names.end() ? token : std::string(it->second);
         return number_to_ordinal_words(parse_ull(m[1].str()), "gen") + " " + month + " " +
                number_to_ordinal_words(parse_ull(m[3].str()), "gen") + " року";
+    });
+    static const std::string month_any =
+        R"((?:січ(?:ень|ня)?|лют(?:ий|ого)?|бер(?:езень|езня)?|квіт(?:ень|ня)?|трав(?:ень|ня)?|черв(?:ень|ня)?|лип(?:ень|ня)?|серп(?:ень|ня)?|вер(?:есень|есня)?|жовт(?:ень|ня)?|лист(?:опада?)?|груд(?:ень|ня)?))";
+    static const std::regex named_without_year(
+        "\\b(\\d{1,2})\\s+(" + month_any + R"()(?!\s+\d{2,4})(?![А-Яа-яЄєІіЇїҐґ]))", std::regex::icase);
+    text = regex_sub(text, named_without_year, [&](const std::smatch& m) {
+        const auto day = parse_ull(m[1].str());
+        if (day < 1 || day > 31) {
+            return m.str();
+        }
+        return number_to_ordinal_words(day, "gen") + " " + month_name(m[2].str());
+    });
+    static const std::regex named_month_year("(^|[^А-Яа-яЄєІіЇїҐґ])(" + month_any + R"()\s+(\d{4})(?!\d))",
+                                             std::regex::icase);
+    text = regex_sub(text, named_month_year, [&](const std::smatch& m) {
+        return m[1].str() + month_nominative(m[2].str()) + " " + number_to_ordinal_words(parse_ull(m[3].str()), "gen") +
+               " року";
     });
     text = ctre_sub<R"((^|[^\d])(\d{3,4})\s+(році|року|рік)(?![А-Яа-яЄєІіЇїҐґ]))">(text, [](const auto& m) {
         static const std::unordered_map<std::string, std::string_view> forms = {
@@ -427,8 +575,7 @@ std::string normalize_dates(std::string text, DateStyle style, bool validate, Ra
 std::string normalize_discourse_dates(std::string text)
 {
     static const std::regex season_year(
-        R"((^|[^А-Яа-яЄєІіЇїҐґ])((?:весна|літо|осінь|зима))\s+(\d{3,4})(?![\dА-Яа-яЄєІіЇїҐґ]))",
-        std::regex::icase);
+        R"((^|[^А-Яа-яЄєІіЇїҐґ])((?:весна|літо|осінь|зима))\s+(\d{3,4})(?![\dА-Яа-яЄєІіЇїҐґ]))", std::regex::icase);
     text = regex_sub(text, season_year, [](const std::smatch& m) {
         return m[1].str() + m[2].str() + " " + number_to_ordinal_words(parse_ull(m[3].str()), "gen") + " року";
     });
@@ -461,9 +608,10 @@ std::string normalize_ordinals(std::string text)
                                                                                   {"ими", "ins_pl"}};
     static const std::unordered_set<std::string> stop = {
         "CD", "DVD", "MD", "DC", "MC", "MI", "MM", "DI", "DIV", "MIX", "CIV", "LCD"};
-    text = ctre_sub<R"((\d+)(?:-|–|—)(ими|им|ім|ою|ій|го|му|й|м|а|у|е|х)(?![А-Яа-яЄєІіЇїҐґ]))">(text, [&](const auto& m) {
-        return number_to_ordinal_words(parse_ull(cap<1>(m)), suffix_form.at(cap_string<2>(m)));
-    });
+    text =
+        ctre_sub<R"((\d+)(?:-|–|—)(ими|им|ім|ою|ій|го|му|й|м|а|у|е|х)(?![А-Яа-яЄєІіЇїҐґ]))">(text, [&](const auto& m) {
+            return number_to_ordinal_words(parse_ull(cap<1>(m)), suffix_form.at(cap_string<2>(m)));
+        });
     text = ctre_sub<
         R"((^|[^A-Za-z])([MDCLXVI]{1,6})\s*(?:-|–|—)\s*([MDCLXVI]{1,6})\s*(?:ст\.|століття)(?![А-Яа-яЄєІіЇїҐґ]))">(
         text, [](const auto& m) {
@@ -548,6 +696,42 @@ std::string normalize_page_ranges(std::string text, RangeStyle style)
                    number_to_ordinal_words(*high, "gen_f") + " сторінки";
         }
         return m[1].str() + "сторінки " + number_to_words(*low) + " " + number_to_words(*high);
+    });
+}
+
+std::string normalize_section_ranges(std::string text, RangeStyle style)
+{
+    struct SectionRange {
+        std::string_view compact;
+        std::string_view genitive;
+        std::string_view ordinal_form;
+    };
+    static const std::unordered_map<std::string, SectionRange> sections = {
+        {"ст", {"статті", "статті", "gen_f"}},
+        {"ч", {"частини", "частини", "gen_f"}},
+        {"п", {"пункти", "пункту", "gen"}},
+        {"пп", {"підпункти", "підпункту", "gen"}},
+        {"абз", {"абзаци", "абзацу", "gen"}},
+        {"розд", {"розділи", "розділу", "gen"}},
+        {"гл", {"глави", "глави", "gen_f"}},
+        {"табл", {"таблиці", "таблиці", "gen_f"}},
+        {"рис", {"рисунки", "рисунка", "gen"}},
+    };
+    static const std::regex range(
+        R"((^|[^А-Яа-яЄєІіЇїҐґA-Za-z])(ст|ч|пп|п|абз|розд|гл|табл|рис)\.\s*(\d+)\s*(?:-|−|–|—)\s*(\d+)(?!\d))",
+        std::regex::icase);
+    return regex_sub(text, range, [&](const std::smatch& m) {
+        const auto low = try_parse_ull(m[3].str());
+        const auto high = try_parse_ull(m[4].str());
+        if (!low || !high) {
+            return m.str();
+        }
+        const auto& section = sections.at(lower_text(m[2].str()));
+        if (style == RangeStyle::FromTo) {
+            return m[1].str() + "від " + number_to_ordinal_words(*low, section.ordinal_form) + " до " +
+                   number_to_ordinal_words(*high, section.ordinal_form) + " " + std::string(section.genitive);
+        }
+        return m[1].str() + std::string(section.compact) + " " + number_to_words(*low) + " " + number_to_words(*high);
     });
 }
 
@@ -801,6 +985,12 @@ std::string normalize_ranges(std::string text, RangeStyle style)
     text = regex_sub(text, percent_range, [&](const std::smatch& m) { return say_percent(m, 2, 3, false); });
 
     auto say_bare = [&](const std::smatch& m, bool explicitly_from_to) {
+        if (!explicitly_from_to && m[2].str().size() == 4 && m[3].str().size() <= 2) {
+            const auto possible_year = try_parse_ull(m[2].str());
+            if (possible_year && *possible_year >= 1000 && *possible_year <= 2999) {
+                return m.str();
+            }
+        }
         const auto grammatical_case = style == RangeStyle::FromTo || explicitly_from_to ? "gen" : "nom";
         const auto low = signed_number_words(m[2].str(), grammatical_case);
         const auto high = signed_number_words(m[3].str(), grammatical_case);
@@ -815,27 +1005,11 @@ std::string normalize_ranges(std::string text, RangeStyle style)
 }
 std::string normalize_case_context(std::string text)
 {
-    static const std::unordered_map<std::string, std::string_view> prep_case = {{"близько", "gen"},
-                                                                                {"понад", "gen"},
-                                                                                {"менше", "gen"},
-                                                                                {"більше", "gen"},
-                                                                                {"від", "gen"},
-                                                                                {"до", "gen"},
-                                                                                {"із", "gen"},
-                                                                                {"з", "instr"},
-                                                                                {"без", "gen"},
-                                                                                {"після", "gen"},
-                                                                                {"перед", "instr"},
-                                                                                {"між", "instr"},
-                                                                                {"над", "instr"},
-                                                                                {"під", "instr"},
-                                                                                {"при", "prep"},
-                                                                                {"к", "dat"},
-                                                                                {"о", "prep"},
-                                                                                {"об", "prep"},
-                                                                                {"у", "prep"},
-                                                                                {"в", "prep"},
-                                                                                {"на", "prep"}};
+    static const std::unordered_map<std::string, std::string_view> prep_case = {
+        {"близько", "gen"}, {"понад", "gen"}, {"менше", "gen"}, {"більше", "gen"}, {"від", "gen"},     {"до", "gen"},
+        {"із", "gen"},      {"з", "instr"},   {"без", "gen"},   {"після", "gen"},  {"перед", "instr"}, {"між", "instr"},
+        {"над", "instr"},   {"під", "instr"}, {"при", "prep"},  {"к", "dat"},      {"о", "prep"},      {"об", "prep"},
+        {"у", "prep"},      {"в", "prep"},    {"на", "prep"}};
     static const std::regex instr(R"((^|[^А-Яа-яЄєІіЇїҐґ])([Зз])\s+(\d+)\s+([а-яєіїґ']{3,}(?:ами|ями|ма))\b)");
     static const std::regex oblique(R"(\b(\d+)\s+([а-яєіїґ']{3,}(?:ами|ями|ах|ях))\b)");
     text = regex_sub(text, instr, [](const std::smatch& m) {
@@ -937,33 +1111,91 @@ std::string normalize_compounds(std::string text)
 }
 std::string normalize_time(std::string text)
 {
-    text = ctre_sub<R"((^|[^\d:])(\d{1,2}):([0-5]\d):([0-5]\d)(?![\d:]))">(text, [](const auto& m) {
-        return cap_string<1>(m) + hours_words(parse_int(cap<2>(m))) + " " + minutes_words(parse_int(cap<3>(m))) + " " +
-               minutes_words(parse_int(cap<4>(m)), {"секунда", "секунди", "секунд"});
-    });
-    text = ctre_sub<R"((^|[^А-Яа-яЄєІіЇїҐґ\d])((?:О|о)(?:б)?) (\d{1,2})(?:-|–|—)?(?:й|ій|а|ої)(?![А-Яа-яЄєІіЇїҐґ]))">(
-        text, [](const auto& m) {
-            return cap_string<1>(m) + cap_string<2>(m) + " " +
-                   number_to_ordinal_words(parse_ull(cap<3>(m)), "nom_f") + " година";
-        });
-    text = ctre_sub<R"((^|[^\d:])(\d{1,2}):([0-5]\d)\s+(ранку|дня|вечора|ночі)(?![А-Яа-яЄєІіЇїҐґ\d:]))">(
-        text, [](const auto& m) {
-            const int hour = parse_int(cap<2>(m));
-            const int minute = parse_int(cap<3>(m));
-            std::string out = cap_string<1>(m) + hours_words(hour);
-            if (minute) {
-                out += " " + minutes_words(minute);
-            }
-            return out + " " + cap_string<4>(m);
-        });
-    return ctre_sub<R"((^|[^\d:])(\d{1,2}):([0-5]\d)(?![\d:]))">(text, [](const auto& m) {
-        const int hour = parse_int(cap<2>(m));
-        const int minute = parse_int(cap<3>(m));
-        std::string out = cap_string<1>(m) + hours_words(hour);
+    auto clock_words = [](int hour, int minute, std::optional<int> second = std::nullopt) {
+        if ((hour == 0 || hour == 24) && minute == 0 && (!second || *second == 0)) {
+            return std::string("опівночі");
+        }
+        std::string out = hours_words(hour);
         if (minute) {
             out += " " + minutes_words(minute);
         }
+        if (second && *second) {
+            out += " " + minutes_words(*second, {"секунда", "секунди", "секунд"});
+        }
         return out;
+    };
+    static const std::regex am_pm(R"((^|[^\d:])(\d{1,2}):([0-5]\d)(?::([0-5]\d))?\s*(a\.?m\.?|p\.?m\.?)(?![A-Za-z]))",
+                                  std::regex::icase);
+    text = regex_sub(text, am_pm, [&](const std::smatch& m) {
+        const auto hour = parse_int(m[2].str());
+        if (hour < 1 || hour > 12) {
+            return m.str();
+        }
+        const auto period = lower_text(m[5].str());
+        const bool pm = period.starts_with("p");
+        const auto suffix = pm ? (hour < 6 ? " дня" : " вечора") : (hour < 5 ? " ночі" : " ранку");
+        return m[1].str() +
+               clock_words(hour,
+                           parse_int(m[3].str()),
+                           m[4].matched ? std::optional<int>(parse_int(m[4].str())) : std::nullopt) +
+               suffix;
+    });
+    static const std::regex zoned(
+        R"((^|[^\d:])(\d{1,2}):([0-5]\d)(?::([0-5]\d))?\s*(UTC|GMT)(?:\s*([+-])\s*(\d{1,2})(?::?([0-5]\d))?)?(?![A-Za-z\d]))",
+        std::regex::icase);
+    text = regex_sub(text, zoned, [&](const std::smatch& m) {
+        const auto hour = parse_int(m[2].str());
+        const auto offset = m[7].matched ? parse_int(m[7].str()) : 0;
+        if (hour > 23 || offset > 23) {
+            return m.str();
+        }
+        std::string out = m[1].str() +
+                          clock_words(hour,
+                                      parse_int(m[3].str()),
+                                      m[4].matched ? std::optional<int>(parse_int(m[4].str())) : std::nullopt) +
+                          " за всесвітнім координованим часом";
+        if (m[6].matched) {
+            out += " " + std::string(m[6].str() == "+" ? "плюс " : "мінус ") + number_to_words(offset) + " " +
+                   plural(offset, {"година", "години", "годин"});
+            if (m[8].matched && parse_int(m[8].str())) {
+                out += " " + minutes_words(parse_int(m[8].str()));
+            }
+        }
+        return out;
+    });
+    static const std::regex hms(R"((^|[^\d:])(\d{1,2}):([0-5]\d):([0-5]\d)(?![\d:]))");
+    text = regex_sub(text, hms, [&](const std::smatch& m) {
+        const auto hour = parse_int(m[2].str());
+        if (hour > 23) {
+            return m.str();
+        }
+        return m[1].str() + clock_words(hour, parse_int(m[3].str()), parse_int(m[4].str()));
+    });
+    text = ctre_sub<R"((^|[^А-Яа-яЄєІіЇїҐґ\d])((?:О|о)(?:б)?) (\d{1,2})(?:-|–|—)?(?:й|ій|а|ої)(?![А-Яа-яЄєІіЇїҐґ]))">(
+        text, [](const auto& m) {
+            return cap_string<1>(m) + cap_string<2>(m) + " " + number_to_ordinal_words(parse_ull(cap<3>(m)), "nom_f") +
+                   " година";
+        });
+    static const std::regex day_period(
+        R"((^|[^\d:])(\d{1,2}):([0-5]\d)\s+(ранку|дня|вечора|ночі)(?![А-Яа-яЄєІіЇїҐґ\d:]))", std::regex::icase);
+    text = regex_sub(text, day_period, [&](const std::smatch& m) {
+        const auto hour = parse_int(m[2].str());
+        return hour <= 23 ? m[1].str() + clock_words(hour, parse_int(m[3].str())) + " " + m[4].str() : m.str();
+    });
+    static const std::regex hm(R"((^|[^\d:])(\d{1,2}):([0-5]\d)(?![\d:]))");
+    text = regex_sub(text, hm, [&](const std::smatch& m) {
+        const auto hour = parse_int(m[2].str());
+        if (hour == 24 && parse_int(m[3].str()) == 0) {
+            return m[1].str() + clock_words(hour, 0);
+        }
+        return hour <= 23 ? m[1].str() + clock_words(hour, parse_int(m[3].str())) : m.str();
+    });
+    static const std::regex ratio(R"((^|[^\d:])(\d+):(\d+)(?![\d:]))");
+    return regex_sub(text, ratio, [](const std::smatch& m) {
+        const auto left = try_parse_ull(m[2].str());
+        const auto right = try_parse_ull(m[3].str());
+        return left && right ? m[1].str() + number_to_words(*left) + " до " + number_to_words_case(*right, "gen")
+                             : m.str();
     });
 }
 std::string normalize_fractions(std::string text)
@@ -989,23 +1221,25 @@ std::string normalize_fractions(std::string text)
     for (const auto& [sym, nd] : vulgar) {
         replace_all(text, sym, say_fraction(nd.first, nd.second));
     }
-    text = ctre_sub<R"((^|[^\d.,/])(\d+) (\d+)/(\d+)\b)">(text, [](const auto& m) {
-        const auto whole = try_parse_ull(cap<2>(m));
-        const auto numerator = try_parse_ull(cap<3>(m));
-        const auto denominator = try_parse_ull(cap<4>(m));
+    text = ctre_sub<R"((^|[^\d.,/])([+\-−]?)(\d+) (\d+)/(\d+)\b)">(text, [](const auto& m) {
+        const auto whole = try_parse_ull(cap<3>(m));
+        const auto numerator = try_parse_ull(cap<4>(m));
+        const auto denominator = try_parse_ull(cap<5>(m));
         if (!whole || !numerator || !denominator || !*denominator) {
             return whole_string(m);
         }
-        return cap_string<1>(m) + number_words_for_gender(*whole, 'f') + " і " +
+        const auto sign = cap<2>(m) == "-" || cap<2>(m) == "−" ? "мінус " : cap<2>(m) == "+" ? "плюс " : "";
+        return cap_string<1>(m) + sign + number_words_for_gender(*whole, 'f') + " і " +
                say_fraction(*numerator, *denominator);
     });
-    return ctre_sub<R"(\b(\d+)/(\d+)\b)">(text, [](const auto& m) {
-        const auto numerator = try_parse_ull(cap<1>(m));
-        const auto denominator = try_parse_ull(cap<2>(m));
-        if (!numerator || !denominator) {
+    return ctre_sub<R"((^|[^\d.,/])([+\-−]?)(\d+)/(\d+)\b)">(text, [](const auto& m) {
+        const auto numerator = try_parse_ull(cap<3>(m));
+        const auto denominator = try_parse_ull(cap<4>(m));
+        if (!numerator || !denominator || !*denominator) {
             return whole_string(m);
         }
-        return say_fraction(*numerator, *denominator);
+        const auto sign = cap<2>(m) == "-" || cap<2>(m) == "−" ? "мінус " : cap<2>(m) == "+" ? "плюс " : "";
+        return cap_string<1>(m) + sign + say_fraction(*numerator, *denominator);
     });
 }
 
@@ -1071,6 +1305,80 @@ std::string normalize_medical(std::string text)
     return ctre_sub<R"((^|[^А-Яа-яЄєІіЇїҐґ\d])№\s*(\d{1,4})(?![\d/]))">(
         text, [](const auto& m) { return cap_string<1>(m) + "номер " + number_to_words(parse_ull(cap<2>(m))); });
 }
+std::string normalize_scientific(std::string text)
+{
+    text = [&] {
+        static const std::unordered_map<char32_t, char> superscript = {{U'⁰', '0'},
+                                                                       {U'¹', '1'},
+                                                                       {U'²', '2'},
+                                                                       {U'³', '3'},
+                                                                       {U'⁴', '4'},
+                                                                       {U'⁵', '5'},
+                                                                       {U'⁶', '6'},
+                                                                       {U'⁷', '7'},
+                                                                       {U'⁸', '8'},
+                                                                       {U'⁹', '9'},
+                                                                       {U'⁻', '-'},
+                                                                       {U'⁺', '+'}};
+        std::string out;
+        bool in_exponent = false;
+        for (std::size_t i = 0; i < text.size();) {
+            std::size_t next = i + 1;
+            const auto cp = decode_one(text, i, next);
+            if (const auto it = superscript.find(cp); it != superscript.end()) {
+                if (!in_exponent) {
+                    if (out.empty() || !std::isdigit(static_cast<unsigned char>(out.back()))) {
+                        out.append(text, i, next - i);
+                        i = next;
+                        continue;
+                    }
+                    out.push_back('^');
+                    in_exponent = true;
+                }
+                out.push_back(it->second);
+            } else {
+                in_exponent = false;
+                out.append(text, i, next - i);
+            }
+            i = next;
+        }
+        return out;
+    }();
+    auto exponent_words = [](std::string token) {
+        std::string sign;
+        if (!token.empty() && (token.front() == '-' || token.front() == '+')) {
+            sign = token.front() == '-' ? "мінус " : "плюс ";
+            token.erase(token.begin());
+        }
+        const auto value = try_parse_ull(token);
+        return value ? std::optional<std::string>(sign + number_to_words(*value)) : std::nullopt;
+    };
+    auto scientific_words = [&](std::string_view base, std::string exponent) {
+        const auto base_words = signed_number_words(base, "nom");
+        const auto exponent_text = exponent_words(std::move(exponent));
+        return base_words && exponent_text
+                   ? std::optional<std::string>(*base_words + " помножити на десять у степені " + *exponent_text)
+                   : std::nullopt;
+    };
+    static const std::regex times_ten(
+        R"((^|[^A-Za-zА-Яа-яЄєІіЇїҐґ\d.,])([+-]?\d+(?:[.,]\d+)?)\s*(?:×|·|x|X|\*)\s*10\s*\^\s*([+-]?\d+)(?!\d))");
+    text = regex_sub(text, times_ten, [&](const std::smatch& m) {
+        const auto words = scientific_words(m[2].str(), m[3].str());
+        return words ? m[1].str() + *words : m.str();
+    });
+    static const std::regex e_notation(
+        R"((^|[^A-Za-zА-Яа-яЄєІіЇїҐґ\d.,])([+-]?\d+(?:[.,]\d+)?)[eE]([+-]?\d+)(?![A-Za-zА-Яа-яЄєІіЇїҐґ\d]))");
+    text = regex_sub(text, e_notation, [&](const std::smatch& m) {
+        const auto words = scientific_words(m[2].str(), m[3].str());
+        return words ? m[1].str() + *words : m.str();
+    });
+    static const std::regex power(R"((^|[^A-Za-zА-Яа-яЄєІіЇїҐґ\d.,])([+-]?\d+(?:[.,]\d+)?)\s*\^\s*([+-]?\d+)(?!\d))");
+    return regex_sub(text, power, [&](const std::smatch& m) {
+        const auto base = signed_number_words(m[2].str(), "nom");
+        const auto exponent = exponent_words(m[3].str());
+        return base && exponent ? m[1].str() + *base + " у степені " + *exponent : m.str();
+    });
+}
 std::string normalize_math(std::string text)
 {
     return ctre_sub<R"((\d)\s*\+\s*(?=\d))">(text, [](const auto& m) { return cap_string<1>(m) + " плюс "; });
@@ -1101,20 +1409,25 @@ std::string normalize_overprecise_currency_decimals(std::string text)
 }
 std::string normalize_multipliers(std::string text)
 {
-    static const std::unordered_map<std::string, std::pair<Forms, bool>> mult = {
-        {"тис", {{"тисяча", "тисячі", "тисяч"}, true}},
-        {"млн", {{"мільйон", "мільйони", "мільйонів"}, false}},
-        {"млрд", {{"мільярд", "мільярди", "мільярдів"}, false}},
-        {"трлн", {{"трильйон", "трильйони", "трильйонів"}, false}}};
+    struct Multiplier {
+        Forms forms;
+        std::string_view decimal;
+        bool feminine;
+    };
+    static const std::unordered_map<std::string, Multiplier> mult = {
+        {"тис", {{"тисяча", "тисячі", "тисяч"}, "тисячі", true}},
+        {"млн", {{"мільйон", "мільйони", "мільйонів"}, "мільйона", false}},
+        {"млрд", {{"мільярд", "мільярди", "мільярдів"}, "мільярда", false}},
+        {"трлн", {{"трильйон", "трильйони", "трильйонів"}, "трильйона", false}}};
     static const std::regex re(R"(\b(\d+(?:[.,]\d+)?)\s*(тис|млн|млрд|трлн)\.?(?![а-яіїєґ]))", std::regex::icase);
     return regex_sub(text, re, [&](const std::smatch& m) {
         const auto key = lower_text(m[2].str());
-        const auto [forms, feminine] = mult.at(key);
+        const auto& [forms, decimal, feminine] = mult.at(key);
         const auto num = m[1].str();
         const auto pos = num.find_first_of(".,");
         if (pos != std::string::npos) {
             auto words = decimal_to_words(std::string_view(num).substr(0, pos), std::string_view(num).substr(pos + 1));
-            return words.empty() ? m.str() : words + " " + std::string(forms[1]);
+            return words.empty() ? m.str() : words + " " + std::string(decimal);
         }
         const auto n = try_parse_ull(num);
         if (!n) {

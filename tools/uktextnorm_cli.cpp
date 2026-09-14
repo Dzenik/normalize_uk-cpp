@@ -85,6 +85,14 @@ std::string_view category_name(uktextnorm::UncertaintyCategory category)
         return "AmbiguousNumberGrouping";
     case uktextnorm::UncertaintyCategory::Agreement:
         return "Agreement";
+    case uktextnorm::UncertaintyCategory::Time:
+        return "Time";
+    case uktextnorm::UncertaintyCategory::Fraction:
+        return "Fraction";
+    case uktextnorm::UncertaintyCategory::Network:
+        return "Network";
+    case uktextnorm::UncertaintyCategory::Scientific:
+        return "Scientific";
     }
     return "Unknown";
 }
@@ -104,7 +112,11 @@ const std::vector<uktextnorm::UncertaintyCategory>& all_categories()
         uktextnorm::UncertaintyCategory::Web,
         uktextnorm::UncertaintyCategory::InvalidDate,
         uktextnorm::UncertaintyCategory::AmbiguousNumberGrouping,
-        uktextnorm::UncertaintyCategory::Agreement};
+        uktextnorm::UncertaintyCategory::Agreement,
+        uktextnorm::UncertaintyCategory::Time,
+        uktextnorm::UncertaintyCategory::Fraction,
+        uktextnorm::UncertaintyCategory::Network,
+        uktextnorm::UncertaintyCategory::Scientific};
     return categories;
 }
 

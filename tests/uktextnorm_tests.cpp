@@ -224,11 +224,11 @@ int main(int argc, char** argv)
     expect_eq("symbol prefix currency",
               normalize_ukrainian("₴1234.56"),
               "тисяча двісті тридцять чотири гривні п'ятдесят шість копійок");
-    expect_eq("dot decimal measure", normalize_ukrainian("2.5 кг"), "дві цілих і п'ять десятих кілограми");
+    expect_eq("dot decimal measure", normalize_ukrainian("2.5 кг"), "дві цілих і п'ять десятих кілограма");
     expect_eq("dot decimal percent", normalize_ukrainian("12.5%"), "дванадцять цілих і п'ять десятих відсотка");
     expect_eq("dot decimal multiplier currency",
               normalize_ukrainian("1.5 млн грн"),
-              "одна ціла і п'ять десятих мільйони гривень");
+              "одна ціла і п'ять десятих мільйона гривень");
     expect_eq("iban",
               normalize_ukrainian("UA213223130000026007233566001"),
               "айбан ю ей два один три два два три один три нуль нуль нуль нуль нуль два шість нуль нуль сім два три "
@@ -242,7 +242,7 @@ int main(int argc, char** argv)
               "рнокпп один два три чотири п'ять шість сім вісім дев'ять нуль");
     expect_eq("vehicle plate", normalize_ukrainian("АА 1234 КВ"), "номерний знак а а один два три чотири ка ве");
     expect_eq(
-        "crypto amount", normalize_ukrainian("0,5 BTC і 2 ETH"), "нуль цілих і п'ять десятих біткоїнів і два ефіри");
+        "crypto amount", normalize_ukrainian("0,5 BTC і 2 ETH"), "нуль цілих і п'ять десятих біткоїна і два ефіри");
     expect_eq(
         "exchange pair", normalize_ukrainian("BTC/UAH та USD/UAH"), "біткоїнів до гривень та доларів США до гривень");
     expect_eq("social handle", normalize_ukrainian("@OpenAI"), "акаунт опеней");
@@ -292,7 +292,7 @@ int main(int argc, char** argv)
     expect_eq("medical concentration", normalize_ukrainian("5 мг/мл"), "п'ять міліграмів на мілілітр");
     expect_eq("dot decimal medical concentration",
               normalize_ukrainian("5.5 мг/мл"),
-              "п'ять цілих і п'ять десятих міліграми на мілілітр");
+              "п'ять цілих і п'ять десятих міліграма на мілілітр");
     expect_eq("medical frequency", normalize_ukrainian("2 рази на день"), "два рази на день");
     expect_eq(
         "medical temperature", normalize_ukrainian("37,5°C"), "тридцять сім цілих і п'ять десятих градуса Цельсія");
@@ -354,9 +354,8 @@ int main(int argc, char** argv)
     expect_eq("kelvin range",
               normalize_ukrainian("250–300 K", range_options),
               "від двохсот п'ятдесяти до трьохсот кельвінів");
-    expect_eq("signed kelvin range",
-              normalize_ukrainian("-5–+7 K", range_options),
-              "від мінус п'яти до плюс семи кельвінів");
+    expect_eq(
+        "signed kelvin range", normalize_ukrainian("-5–+7 K", range_options), "від мінус п'яти до плюс семи кельвінів");
     expect_eq("decimal kelvin range",
               normalize_ukrainian("1,5–2,5 K", range_options),
               "від однієї цілої і п'яти десятих до двох цілих і п'яти десятих кельвіна");
@@ -427,6 +426,72 @@ int main(int argc, char** argv)
     expect_eq("page range", normalize_ukrainian("стор. 5–7", range_options), "від п'ятої до сьомої сторінки");
     expect_eq("short page range", normalize_ukrainian("с. 5–7", range_options), "від п'ятої до сьомої сторінки");
     expect_eq("uppercase page range", normalize_ukrainian("Стор. 5—7", range_options), "від п'ятої до сьомої сторінки");
+    expect_eq("legal article range", normalize_ukrainian("ст. 5–7", range_options), "від п'ятої до сьомої статті");
+    expect_eq("legal point range", normalize_ukrainian("п. 2-4", range_options), "від другого до четвертого пункту");
+    expect_eq("year month", normalize_ukrainian("2026-09", range_options), "вересень дві тисячі двадцять шостого року");
+    expect_not_contains("invalid year month is not a range", normalize_ukrainian("2026-13", range_options), "від");
+    expect_eq("short DMY date",
+              normalize_ukrainian("14.09.26", range_options),
+              "чотирнадцяте вересня дві тисячі двадцять шостого року");
+    expect_eq("ISO datetime",
+              normalize_ukrainian("2026-09-14T10:30:00Z", range_options),
+              "чотирнадцяте вересня дві тисячі двадцять шостого року о десять годин тридцять хвилин за всесвітнім "
+              "координованим часом");
+    expect_eq("PM time", normalize_ukrainian("10:30 PM"), "десять годин тридцять хвилин вечора");
+    expect_eq("midnight", normalize_ukrainian("00:00"), "опівночі");
+    expect_eq("ratio", normalize_ukrainian("16:9"), "шістнадцять до дев'яти");
+    expect_eq("scientific e notation", normalize_ukrainian("1e-3"), "один помножити на десять у степені мінус три");
+    expect_eq("scientific superscript",
+              normalize_ukrainian("6.02×10²³"),
+              "шість цілих і дві сотих помножити на десять у степені двадцять три");
+    expect_eq("negative fraction", normalize_ukrainian("-1/2"), "мінус одна друга");
+    expect_eq("zero denominator preserved", normalize_ukrainian("1/0"), "один/нуль");
+    expect_eq("signed prefix currency", normalize_ukrainian("-$5"), "мінус п'ять доларів");
+    expect_eq("accounting currency", normalize_ukrainian("(100 грн)"), "мінус сто гривень");
+    expect_eq("currency code prefix", normalize_ukrainian("USD 10"), "десять доларів");
+    expect_eq("repeated currency amounts", normalize_ukrainian("5 грн і 6 грн"), "п'ять гривень і шість гривень");
+    expect_eq("additional fiat", normalize_ukrainian("2 KRW"), "дві вони");
+    expect_eq("additional crypto", normalize_ukrainian("0.5 DOGE"), "нуль цілих і п'ять десятих доджкоїна");
+    expect_eq(
+        "fuel economy", normalize_ukrainian("6.5 L/100km"), "шість цілих і п'ять десятих літра на сто кілометрів");
+    expect_eq("imperial unit", normalize_ukrainian("12 oz"), "дванадцять унцій");
+    expect_eq("IPv4 endpoint",
+              normalize_ukrainian("192.168.1.1:8080"),
+              "ай пі сто дев'яносто два сто шістдесят вісім один один порт вісім тисяч вісімдесят");
+    expect_eq("IPv4 CIDR", normalize_ukrainian("10.0.0.0/24"), "ай пі десять нуль нуль нуль префікс двадцять чотири");
+    expect_eq("MAC address",
+              normalize_ukrainian("AA:BB:CC:DD:EE:FF"),
+              "мак адреса ей ей двокрапка бі бі двокрапка сі сі двокрапка ді ді двокрапка і і двокрапка еф еф");
+    expect_eq("decimal coordinates",
+              normalize_ukrainian("50.4501 N, 30.5234 E"),
+              "п'ятдесят цілих і чотири тисячі п'ятсот одна десятитисячна градуса північної широти, тридцять цілих і "
+              "п'ять тисяч двісті тридцять чотири десятитисячних градуса східної довготи");
+    expect_not_contains("invalid decimal coordinates", normalize_ukrainian("90.1 N"), "північної широти");
+    expect_not_contains("invalid DMS coordinates", normalize_ukrainian("50°99′00″N"), "північної широти");
+    expect_eq("UUID",
+              normalize_ukrainian("550e8400-e29b-41d4-a716-446655440000"),
+              "ю у ай ді п'ять п'ять нуль і вісім чотири нуль нуль дефіс і два дев'ять бі дефіс чотири один ді чотири "
+              "дефіс ей сім один шість дефіс чотири чотири шість шість п'ять п'ять чотири чотири нуль нуль нуль нуль");
+    expect_eq("ISBN",
+              normalize_ukrainian("ISBN 978-617-123-456-7"),
+              "ай ес бі ен дев'ять сім вісім шість один сім один два три чотири п'ять шість сім");
+    expect_eq("ISSN", normalize_ukrainian("ISSN 1234-567X"), "ай ес ес ен один два три чотири п'ять шість сім екс");
+    expect_eq("VIN",
+              normalize_ukrainian("VIN WVWZZZ1JZXW000001"),
+              "він номер дабл ю ві дабл ю зед зед зед один джей зед екс дабл ю нуль нуль нуль нуль нуль один");
+    expect_eq("SWIFT", normalize_ukrainian("SWIFT DEUTDEFF500"), "свіфт код ді і ю ті ді і еф еф п'ять нуль нуль");
+    expect_eq("foreign IBAN",
+              normalize_ukrainian("DE89 3704 0044 0532 0130 00"),
+              "айбан ді і вісім дев'ять три сім нуль чотири нуль нуль чотири чотири нуль п'ять три два нуль один три "
+              "нуль нуль нуль");
+    expect_eq("international access phone",
+              normalize_ukrainian("0044 20 7946 0958 ext 5", range_options),
+              "плюс сорок чотири двадцять сім дев'ять чотири шість нуль дев'ять п'ять вісім додатковий п'ять");
+    expect_eq("FTP arbitrary TLD",
+              normalize_ukrainian("ftp://example.dev/a#b"),
+              "фтп двокрапка слеш слеш ексампле крапка дев слеш а решітка б");
+    expect_eq("SSML preserved", normalize_ukrainian("<speak>5 кг</speak>"), "<speak>п'ять кілограмів</speak>");
+    expect_eq("inline code preserved", normalize_ukrainian("Код `x=5`, вага 2 кг"), "Код `x=5`, вага два кілограми");
     uktextnorm::NormalizeOptions compact_range_options;
     expect_eq("compact temperature range",
               normalize_ukrainian("-5–-3 °F", compact_range_options),
@@ -543,8 +608,8 @@ int main(int argc, char** argv)
                               uktextnorm::UncertaintyCategory::Identifier,
                               uktextnorm::UncertaintySeverity::Info);
     expect_uncertain_metadata("uncertain currency metadata",
-                              uktextnorm::flag_uncertain("Сума 12 RUB."),
-                              "12 RUB",
+                              uktextnorm::flag_uncertain("Сума 12 AED."),
+                              "12 AED",
                               uktextnorm::UncertaintyCategory::Currency,
                               uktextnorm::UncertaintySeverity::Warning);
     expect_uncertain_metadata("uncertain unit metadata",
@@ -564,10 +629,9 @@ int main(int argc, char** argv)
                               uktextnorm::UncertaintySeverity::Warning);
 
     {
-        uktextnorm::NormalizeOptions conservative = uktextnorm::options_for_preset(uktextnorm::NormalizePreset::Conservative);
-        expect_eq("homoglyphs off in conservative",
-                  normalize_ukrainian("Пoлтaвa", conservative),
-                  "Пoлтaвa");
+        uktextnorm::NormalizeOptions conservative =
+            uktextnorm::options_for_preset(uktextnorm::NormalizePreset::Conservative);
+        expect_eq("homoglyphs off in conservative", normalize_ukrainian("Пoлтaвa", conservative), "Пoлтaвa");
         uktextnorm::NormalizeOptions no_validation;
         no_validation.validate_dates = false;
         expect_eq("invalid date rejected",
@@ -581,9 +645,7 @@ int main(int argc, char** argv)
         expect_eq("quote strip", normalize_ukrainian("Слово «тест» тут", strip_quotes), "Слово тест тут");
         uktextnorm::NormalizeOptions straight_quotes;
         straight_quotes.quote_style = uktextnorm::QuoteStyle::Straight;
-        expect_eq("quote straight",
-                  normalize_ukrainian("Слово «тест» тут", straight_quotes),
-                  "Слово \"тест\" тут");
+        expect_eq("quote straight", normalize_ukrainian("Слово «тест» тут", straight_quotes), "Слово \"тест\" тут");
         uktextnorm::NormalizeOptions no_network = conservative;
         no_network.normalize_network_addresses = false;
         expect_eq("ip network opt-out",
@@ -605,6 +667,36 @@ int main(int argc, char** argv)
                               "4 фларбах",
                               uktextnorm::UncertaintyCategory::Agreement,
                               uktextnorm::UncertaintySeverity::Info);
+    expect_uncertain_metadata("invalid time metadata",
+                              uktextnorm::flag_uncertain("Час 99:30"),
+                              "99:30",
+                              uktextnorm::UncertaintyCategory::Time,
+                              uktextnorm::UncertaintySeverity::Error);
+    expect_uncertain_metadata("invalid AM PM metadata",
+                              uktextnorm::flag_uncertain("Час 13:30 PM"),
+                              "13:30 PM",
+                              uktextnorm::UncertaintyCategory::Time,
+                              uktextnorm::UncertaintySeverity::Error);
+    expect_uncertain_metadata("invalid ISO date metadata",
+                              uktextnorm::flag_uncertain("Дата 2026-13-01"),
+                              "2026-13-01",
+                              uktextnorm::UncertaintyCategory::InvalidDate,
+                              uktextnorm::UncertaintySeverity::Error);
+    expect_uncertain_metadata("zero denominator metadata",
+                              uktextnorm::flag_uncertain("Частка 1/0"),
+                              "1/0",
+                              uktextnorm::UncertaintyCategory::Fraction,
+                              uktextnorm::UncertaintySeverity::Error);
+    expect_uncertain_metadata("invalid network metadata",
+                              uktextnorm::flag_uncertain("IP 999.1.1.1/40"),
+                              "999.1.1.1/40",
+                              uktextnorm::UncertaintyCategory::Network,
+                              uktextnorm::UncertaintySeverity::Error);
+    expect_uncertain_metadata("malformed scientific metadata",
+                              uktextnorm::flag_uncertain("Значення 1e+"),
+                              "1e+",
+                              uktextnorm::UncertaintyCategory::Scientific,
+                              uktextnorm::UncertaintySeverity::Warning);
 
     for (int i = 1; i < argc; ++i) {
         run_golden_file(argv[i]);

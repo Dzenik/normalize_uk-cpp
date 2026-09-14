@@ -21,8 +21,7 @@ std::string normalize_known_acronyms(std::string text)
         for (const auto& entry : lexicon::kAcronyms) {
             keys.emplace_back(entry.acronym);
         }
-        return "(^|[^А-Яа-яЄєІіЇїҐґ])((?:" + regex_alternation(std::move(keys)) +
-               R"())(?![А-Яа-яЄєІіЇїҐґ]))";
+        return "(^|[^А-Яа-яЄєІіЇїҐґ])((?:" + regex_alternation(std::move(keys)) + R"())(?![А-Яа-яЄєІіЇїҐґ]))";
     }());
     return regex_sub(text, re, [](const std::smatch& m) {
         auto out = map.at(m[2].str());
@@ -65,8 +64,12 @@ std::string normalize_currency(std::string text)
         bool sub_fem = false;
         std::vector<std::regex> patterns;
     };
+    static const std::regex signed_prefix("([+-])\\s*(" + currency_token_alt() + ")\\s*(?=\\d)");
+    text = regex_sub(text, signed_prefix, [](const std::smatch& m) { return m[2].str() + m[1].str(); });
+    static const std::regex accounting("\\((\\d+(?:[.,]\\d{1,2})?)\\s*(" + currency_token_alt() + ")\\)");
+    text = regex_sub(text, accounting, [](const std::smatch& m) { return "-" + m[1].str() + " " + m[2].str(); });
     static const std::vector<Currency> currencies = [] {
-        static constexpr std::string_view amount = R"(((?:\d+[.,]\d\d|\d+)(?!\d|[.,]\d)))";
+        static constexpr std::string_view amount = R"(([+-]?(?:\d+[.,]\d{1,2}|\d+|[.,]\d{1,2})(?!\d|[.,]\d)))";
         std::vector<Currency> out;
         for (const auto& entry : lexicon::kCurrencies) {
             Currency c;
@@ -94,6 +97,8 @@ std::string normalize_currency(std::string text)
             }
             c.patterns.emplace_back(std::string(amount) + R"(\s*)" + std::string(entry.code) +
                                     R"((?![A-Za-zА-Яа-яЄєІіЇїҐґ]))");
+            c.patterns.emplace_back(std::string(entry.code) + R"(\s*)" + std::string(amount) +
+                                    R"((?![A-Za-zА-Яа-яЄєІіЇїҐґ]))");
             if (has_symbol) {
                 c.patterns.emplace_back(symbol + R"(\s*)" + std::string(amount));
                 if (entry.trailing_symbol) {
@@ -106,9 +111,15 @@ std::string normalize_currency(std::string text)
     }();
     auto amount_words = [](std::string amount_text, const Currency& c) {
         replace_all(amount_text, " ", "");
+        std::string sign;
+        if (!amount_text.empty() && (amount_text.front() == '+' || amount_text.front() == '-')) {
+            sign = amount_text.front() == '-' ? "мінус " : "плюс ";
+            amount_text.erase(amount_text.begin());
+        }
         const auto pos = amount_text.find_first_of(".,");
-        const auto main = parse_ull(pos == std::string::npos ? std::string_view(amount_text)
-                                                             : std::string_view(amount_text).substr(0, pos));
+        const auto main_text =
+            pos == std::string::npos ? std::string_view(amount_text) : std::string_view(amount_text).substr(0, pos);
+        const auto main = main_text.empty() ? 0 : parse_ull(main_text);
         unsigned sub = 0;
         if (pos != std::string::npos) {
             auto frac = amount_text.substr(pos + 1);
@@ -123,7 +134,7 @@ std::string normalize_currency(std::string text)
         if (c.main_fem) {
             feminine_last(main_words);
         }
-        std::string out = join(main_words) + " " + plural(main, c.main);
+        std::string out = sign + join(main_words) + " " + plural(main, c.main);
         if (sub > 0) {
             auto sub_words = split_words(number_to_words(sub));
             if (c.sub_fem) {
@@ -135,25 +146,31 @@ std::string normalize_currency(std::string text)
     };
     for (const auto& c : currencies) {
         for (const auto& re : c.patterns) {
-            bool replaced = false;
-            text = regex_sub(text, re, [&](const std::smatch& m) {
-                if (replaced) {
-                    return m.str();
-                }
-                replaced = true;
-                return amount_words(m[1].str(), c);
-            });
+            text = regex_sub(text, re, [&](const std::smatch& m) { return amount_words(m[1].str(), c); });
         }
     }
     return text;
 }
 std::string normalize_finance(std::string text)
 {
-    text = ctre_sub<R"(\b(BTC|ETH|USDT|BNB|USD|EUR|GBP|UAH)/(BTC|ETH|USDT|BNB|USD|EUR|GBP|UAH)\b)">(
-        text, [](const auto& m) { return finance_unit_many(cap<1>(m)) + " до " + finance_unit_many(cap<2>(m)); });
-    return ctre_sub<R"((^|[^\wА-Яа-яЄєІіЇїҐґ])(\d+(?:[.,]\d+)?)\s*(BTC|ETH|USDT|BNB)\b)">(text, [](const auto& m) {
-        const auto& unit = finance_units().at(cap_string<3>(m));
-        return cap_string<1>(m) + finance_amount_words(cap_string<2>(m), unit);
+    static const std::string ticker_alt = [] {
+        std::vector<std::string> tickers;
+        tickers.reserve(finance_units().size());
+        for (const auto& [ticker, unused] : finance_units()) {
+            (void)unused;
+            tickers.push_back(ticker);
+        }
+        return regex_alternation(std::move(tickers));
+    }();
+    static const std::regex pair("\\b(" + ticker_alt + ")/(" + ticker_alt + ")\\b");
+    text = regex_sub(text, pair, [](const std::smatch& m) {
+        return finance_unit_many(m[1].str()) + " до " + finance_unit_many(m[2].str());
+    });
+    static const std::regex amount("(^|[^\\wА-Яа-яЄєІіЇїҐґ])([+-]?)(\\d+(?:[.,]\\d+)?)\\s*(" + ticker_alt + ")\\b");
+    return regex_sub(text, amount, [](const std::smatch& m) {
+        const auto& unit = finance_units().at(m[4].str());
+        const auto sign = m[2].str() == "-" ? "мінус " : m[2].str() == "+" ? "плюс " : "";
+        return m[1].str() + sign + finance_amount_words(m[3].str(), unit);
     });
 }
 std::string normalize_english(std::string text)

@@ -21,6 +21,10 @@ enum class UncertaintyCategory {
     InvalidDate,
     AmbiguousNumberGrouping,
     Agreement,
+    Time,
+    Fraction,
+    Network,
+    Scientific,
 };
 
 enum class UncertaintySeverity {

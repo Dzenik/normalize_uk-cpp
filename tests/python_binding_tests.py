@@ -36,6 +36,66 @@ class NormalizeUkBindingTests(unittest.TestCase):
             with self.subTest(source=source):
                 self.assertEqual(nuk.normalize_ukrainian(source, self.options), expected)
 
+    def test_dates_times_and_scientific_notation(self) -> None:
+        cases = {
+            "2026-09": "вересень дві тисячі двадцять шостого року",
+            "14.09.26": "чотирнадцятого вересня дві тисячі двадцять шостого року",
+            "2026-09-14T10:30:00Z": (
+                "чотирнадцятого вересня дві тисячі двадцять шостого року "
+                "о десять годин тридцять хвилин за всесвітнім координованим часом"
+            ),
+            "10:30 PM": "десять годин тридцять хвилин вечора",
+            "6.02×10²³": "шість цілих і дві сотих помножити на десять у степені двадцять три",
+        }
+        for source, expected in cases.items():
+            with self.subTest(source=source):
+                self.assertEqual(nuk.normalize_ukrainian(source, self.options), expected)
+
+    def test_units_finance_and_structured_data(self) -> None:
+        cases = {
+            "6.5 L/100km": "шість цілих і п'ять десятих літра на сто кілометрів",
+            "12 oz": "дванадцять унцій",
+            "0.5 DOGE": "нуль цілих і п'ять десятих доджкоїна",
+            "-$5": "мінус п'ять доларів",
+            "10.0.0.0/24": "ай пі десять нуль нуль нуль префікс двадцять чотири",
+            "ст. 5–7": "від п'ятої до сьомої статті",
+        }
+        for source, expected in cases.items():
+            with self.subTest(source=source):
+                self.assertEqual(nuk.normalize_ukrainian(source, self.options), expected)
+
+    def test_uncertainty_categories(self) -> None:
+        cases = {
+            "99:30": nuk.UncertaintyCategory.Time,
+            "1/0": nuk.UncertaintyCategory.Fraction,
+            "999.1.1.1/40": nuk.UncertaintyCategory.Network,
+            "1e+": nuk.UncertaintyCategory.Scientific,
+        }
+        for source, category in cases.items():
+            with self.subTest(source=source):
+                self.assertTrue(any(span.category == category for span in nuk.flag_uncertain(source)))
+
+    def test_public_helpers_and_tokenization(self) -> None:
+        self.assertEqual(nuk.number_to_words(21), "двадцять один")
+        self.assertEqual(nuk.number_to_ordinal_words(3, "nom_f"), "третя")
+        self.assertEqual(nuk.number_to_words_case(5, "gen"), "п'яти")
+        text = "Привіт. Світ!"
+        sentences = nuk.split_sentences(text)
+        self.assertEqual([part.text for part in sentences], ["Привіт.", "Світ!"])
+        for sentence in sentences:
+            self.assertEqual(sentence.text, text.encode()[sentence.start : sentence.stop].decode())
+        self.assertEqual(nuk.sentenize(text), sentences)
+        tokens = nuk.tokenize("Два слова")
+        self.assertTrue(tokens)
+        for token in tokens:
+            self.assertEqual(token.text, "Два слова".encode()[token.start : token.stop].decode())
+
+    def test_markup_is_preserved(self) -> None:
+        self.assertEqual(
+            nuk.normalize_ukrainian("<speak>5 кг</speak>", self.options),
+            "<speak>п'ять кілограмів</speak>",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

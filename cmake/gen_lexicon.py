@@ -14,7 +14,7 @@ from pathlib import Path
 TABLES = {
     # file: (array name, struct name, columns, (bool column names))
     "units.tsv": ("kUnits", "UnitEntry",
-                  ["key", "one", "few", "many", "gender"], set()),
+                  ["key", "one", "few", "many", "decimal", "gender"], set()),
     "counted_nouns.tsv": ("kCountedNouns", "CountedNounEntry",
                           ["key", "one", "few", "many", "gender"], set()),
     "acronyms.tsv": ("kAcronyms", "AcronymEntry",
@@ -26,7 +26,7 @@ TABLES = {
     "english_words.tsv": ("kEnglishWords", "EnglishWordEntry",
                           ["latin", "cyrillic"], set()),
     "finance_units.tsv": ("kFinanceUnits", "FinanceUnitEntry",
-                          ["code", "one", "few", "many", "feminine"], {"feminine"}),
+                          ["code", "one", "few", "many", "decimal", "feminine"], {"feminine"}),
     "currencies.tsv": ("kCurrencies", "CurrencyEntry",
                        ["code", "symbol", "word_re", "main_one", "main_few", "main_many",
                         "main_fem", "sub_one", "sub_few", "sub_many", "sub_fem",

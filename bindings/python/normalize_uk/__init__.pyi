@@ -18,6 +18,10 @@ class UncertaintyCategory(Enum):
     InvalidDate: UncertaintyCategory
     AmbiguousNumberGrouping: UncertaintyCategory
     Agreement: UncertaintyCategory
+    Time: UncertaintyCategory
+    Fraction: UncertaintyCategory
+    Network: UncertaintyCategory
+    Scientific: UncertaintyCategory
 
 
 class UncertaintySeverity(Enum):
