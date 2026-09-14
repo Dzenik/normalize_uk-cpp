@@ -18,6 +18,15 @@ void expect_eq(const std::string& name, const std::string& actual, const std::st
     std::cerr << name << "\nexpected: " << expected << "\nactual:   " << actual << "\n";
 }
 
+void expect_not_contains(const std::string& name, const std::string& actual, const std::string& unexpected)
+{
+    if (!actual.contains(unexpected)) {
+        return;
+    }
+    ++failures;
+    std::cerr << name << "\nunexpected fragment: " << unexpected << "\nactual: " << actual << "\n";
+}
+
 void expect_uncertain(const std::string& name,
                       const std::vector<uktextnorm::UncertainSpan>& spans,
                       std::size_t index,
@@ -312,16 +321,91 @@ int main(int argc, char** argv)
         "from-to en dash unit range", normalize_ukrainian("5–7 кг", range_options), "від п'яти до семи кілограмів");
     expect_eq(
         "from-to percent range", normalize_ukrainian("10-15%", range_options), "від десяти до п'ятнадцяти відсотків");
-    for (const auto input : {"5-7 °C", "5–7 °C", "5-7°C", "5–7°C", "5-7 градусів Цельсія", "5–7 градусів Цельсія"}) {
+    for (const auto input : {"5-7 °C",
+                             "5–7 °C",
+                             "5—7 °C",
+                             "5 - 7 °C",
+                             "5-7°C",
+                             "5–7°C",
+                             "5–7 °С",
+                             "5–7 °с",
+                             "5-7 градусів Цельсія",
+                             "5–7 градусів Цельсія",
+                             "5-7 градусів цельсія",
+                             "5-7 ГРАДУСІВ ЦЕЛЬСІЯ",
+                             "5-7 градусів C",
+                             "5–7 градусів за Цельсієм"}) {
         expect_eq("from-to temperature range " + std::string(input),
                   normalize_ukrainian(input, range_options),
                   "від п'яти до семи градусів Цельсія");
     }
+    expect_eq("decimal temperature range",
+              normalize_ukrainian("5,5–7,5 °C", range_options),
+              "від п'яти цілих і п'яти десятих до семи цілих і п'яти десятих градуса Цельсія");
+    expect_eq("fahrenheit temperature range",
+              normalize_ukrainian("5–7 °F", range_options),
+              "від п'яти до семи градусів Фаренгейта");
+    expect_eq("unicode temperature symbols",
+              normalize_ukrainian("5–7 ℃ і 8–9 ℉", range_options),
+              "від п'яти до семи градусів Цельсія і від восьми до дев'яти градусів Фаренгейта");
+    expect_eq("repeated temperature units",
+              normalize_ukrainian("5°C–7°C", range_options),
+              "від п'яти до семи градусів Цельсія");
+    expect_eq("explicit unsigned temperature range",
+              normalize_ukrainian("від 5 до 7 °C", range_options),
+              "від п'яти до семи градусів Цельсія");
+    expect_eq("explicit repeated named temperature range",
+              normalize_ukrainian("від -5 градусів Цельсія до +7 градусів Цельсія", range_options),
+              "від мінус п'яти до плюс семи градусів Цельсія");
     expect_eq("negative temperature", normalize_ukrainian("-5 °C", range_options), "мінус п'ять градусів Цельсія");
     expect_eq("unicode minus temperature", normalize_ukrainian("−5 °C", range_options), "мінус п'ять градусів Цельсія");
+    expect_eq(
+        "en dash unary minus temperature", normalize_ukrainian("–5 °C", range_options), "мінус п'ять градусів Цельсія");
+    expect_eq("signed decimal temperature",
+              normalize_ukrainian("-5,5 °C", range_options),
+              "мінус п'ять цілих і п'ять десятих градуса Цельсія");
     expect_eq("explicit signed temperature range",
               normalize_ukrainian("від -5 до +7 °C", range_options),
               "від мінус п'яти до плюс семи градусів Цельсія");
+    expect_eq("descending temperature range",
+              normalize_ukrainian("7–5 °C", range_options),
+              "від семи до п'яти градусів Цельсія");
+    expect_eq(
+        "equal temperature range", normalize_ukrainian("5–5 °C", range_options), "від п'яти до п'яти градусів Цельсія");
+    expect_not_contains("oversized temperature range",
+                        normalize_ukrainian("999999999999999999999999–1000000000000000000000000 °C", range_options),
+                        "від нуля до нуля");
+    expect_eq("signed unit range", normalize_ukrainian("-5–7 кг", range_options), "від мінус п'яти до семи кілограмів");
+    expect_eq("decimal unit range",
+              normalize_ukrainian("1,5–2,5 кг", range_options),
+              "від однієї цілої і п'яти десятих до двох цілих і п'яти десятих кілограмів");
+    expect_eq("repeated unit range", normalize_ukrainian("1 кг–2 кг", range_options), "від одного до двох кілограмів");
+    expect_eq("explicit repeated unit range",
+              normalize_ukrainian("від 1 кг до 2 кг", range_options),
+              "від одного до двох кілограмів");
+    expect_eq("repeated decimal percent range",
+              normalize_ukrainian("10,5%–15,5%", range_options),
+              "від десяти цілих і п'яти десятих до п'ятнадцяти цілих і п'яти десятих відсотків");
+    expect_eq("explicit repeated percent range",
+              normalize_ukrainian("від 10% до 15%", range_options),
+              "від десяти до п'ятнадцяти відсотків");
+    expect_eq("currency suffix range", normalize_ukrainian("5–7 грн", range_options), "від п'яти до семи гривень");
+    expect_eq("currency prefix range", normalize_ukrainian("$5–$7", range_options), "від п'яти до семи доларів");
+    expect_eq("explicit repeated currency range",
+              normalize_ukrainian("від 5 грн до 7 грн", range_options),
+              "від п'яти до семи гривень");
+    expect_eq("bare number range", normalize_ukrainian("5–7", range_options), "від п'яти до семи");
+    expect_eq("time range",
+              normalize_ukrainian("10:30–12:45", range_options),
+              "від десятої години тридцяти хвилин до дванадцятої години сорока п'яти хвилин");
+    expect_eq("fraction range", normalize_ukrainian("1/2–3/4", range_options), "від однієї другої до трьох четвертих");
+    expect_eq("page range", normalize_ukrainian("стор. 5–7", range_options), "від п'ятої до сьомої сторінки");
+    expect_eq("short page range", normalize_ukrainian("с. 5–7", range_options), "від п'ятої до сьомої сторінки");
+    expect_eq("uppercase page range", normalize_ukrainian("Стор. 5—7", range_options), "від п'ятої до сьомої сторінки");
+    uktextnorm::NormalizeOptions compact_range_options;
+    expect_eq("compact temperature range",
+              normalize_ukrainian("-5–-3 °F", compact_range_options),
+              "мінус п'ять мінус три градусів Фаренгейта");
     uktextnorm::NormalizeOptions phone_options;
     phone_options.phone_style = uktextnorm::PhoneStyle::DigitByDigit;
     expect_eq("phone digit by digit",
@@ -345,6 +429,17 @@ int main(int argc, char** argv)
         "spoken numeric date range",
         normalize_ukrainian("15.06.2026-16.06.2026", spoken_dates),
         "п'ятнадцятого червня дві тисячі двадцять шостого року шістнадцятого червня дві тисячі двадцять шостого року");
+    spoken_dates.range_style = uktextnorm::RangeStyle::FromTo;
+    expect_eq("spoken en dash day range",
+              normalize_ukrainian("15–16 вересня 2026", spoken_dates),
+              "від п'ятнадцятого до шістнадцятого вересня дві тисячі двадцять шостого року");
+    expect_eq("spoken full date range from-to",
+              normalize_ukrainian("15.06.2026–16.06.2026", spoken_dates),
+              "від п'ятнадцятого червня дві тисячі двадцять шостого року до шістнадцятого червня дві тисячі "
+              "двадцять шостого року");
+    expect_eq("year range from-to",
+              normalize_ukrainian("2020–2024 рр.", spoken_dates),
+              "від дві тисячі двадцятого до дві тисячі двадцять четвертого року");
     uktextnorm::NormalizeOptions tts_options;
     tts_options.range_style = uktextnorm::RangeStyle::FromTo;
     tts_options.phone_style = uktextnorm::PhoneStyle::DigitByDigit;

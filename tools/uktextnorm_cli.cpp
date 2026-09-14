@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#ifndef RUACCENT_CPP_VERSION
-#define RUACCENT_CPP_VERSION "unknown"
+#ifndef NORMALIZE_UK_CPP_VERSION
+#define NORMALIZE_UK_CPP_VERSION "unknown"
 #endif
 
 namespace {
@@ -476,7 +476,7 @@ int main(int argc, char** argv)
                 return 0;
             }
             if (arg == "--version") {
-                std::cout << "uktextnorm " << RUACCENT_CPP_VERSION << '\n';
+                std::cout << "uktextnorm " << NORMALIZE_UK_CPP_VERSION << '\n';
                 return 0;
             }
             if (arg == "--preset") {

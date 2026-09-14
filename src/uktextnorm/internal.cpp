@@ -172,8 +172,8 @@ bool has_currency_candidate(std::string_view text)
 
 bool has_symbol_candidate(std::string_view text)
 {
-    return contains_any_token(text, {"°", "±", "≈", "≠", "≤", "≥", "×", "÷", "=", "<", ">", "‰",
-                                     "§", "₿", "•", "·", "~", "&", "#", "_", "²", "³", "№"});
+    return contains_any_token(text, {"°", "℃", "℉", "±", "≈", "≠", "≤", "≥", "×", "÷", "=", "<", ">",
+                                     "‰", "§", "₿", "•", "·", "~", "&", "#", "_", "²", "³", "№"});
 }
 
 bool is_ascii_acronym(std::string_view text)
@@ -509,7 +509,7 @@ const std::string& month_alt()
 
 const std::regex& date_day_range_re()
 {
-    static const std::regex re("\\b(\\d{1,2})\\s*[-–—]\\s*(\\d{1,2})\\s+(" + month_alt() +
+    static const std::regex re("\\b(\\d{1,2})\\s*(?:-|−|–|—)\\s*(\\d{1,2})\\s+(" + month_alt() +
                                R"()\s+(\d{3,4})(?:\s+року\b|\s*р\.(?![а-яіїєґ]))?)");
     return re;
 }
@@ -518,13 +518,6 @@ const std::regex& date_spelled_re()
 {
     static const std::regex re("\\b(\\d{1,2})\\s+(" + month_alt() +
                                R"()\s+(\d{3,4})(?:\s+року\b|\s*р\.(?![а-яіїєґ]))?)");
-    return re;
-}
-
-const std::regex& range_units_re()
-{
-    static const std::regex re("(^|[^\\d])(\\d+)\\s*(?:-|–|—)\\s*(\\d+)\\s*(" + unit_alt() +
-                               R"()(?![A-Za-zА-Яа-яЄєІіЇїҐґ]))");
     return re;
 }
 
@@ -659,13 +652,14 @@ std::string inflect_ordinal(std::string stem, std::string_view form)
                                                                               {"pl", "их"},
                                                                               {"loc_pl", "их"},
                                                                               {"acc_f", "у"},
+                                                                              {"gen_f", "ої"},
                                                                               {"ins", "им"},
                                                                               {"ins_f", "ою"},
                                                                               {"ins_pl", "ими"},
                                                                               {"loc_f", "ій"}};
     // Soft-stem adjectives (третій) take softened endings.
     static const std::unordered_map<std::string, std::string_view> soft_endings = {
-        {"ins", "ім"}, {"ins_f", "ьою"}, {"ins_pl", "іми"}, {"pl", "іх"}, {"loc_pl", "іх"}};
+        {"gen_f", "ьої"}, {"ins", "ім"}, {"ins_f", "ьою"}, {"ins_pl", "іми"}, {"pl", "іх"}, {"loc_pl", "іх"}};
     const auto it = endings.find(std::string(form));
     if (it == endings.end()) {
         return stem;

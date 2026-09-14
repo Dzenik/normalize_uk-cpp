@@ -106,6 +106,7 @@ add_custom_target(format
 if(NORMALIZE_UK_CPP_BUILD_TOOLS)
     add_executable(uktextnorm tools/uktextnorm_cli.cpp)
     target_link_libraries(uktextnorm PRIVATE normalize_uk_cpp::normalize_uk_cpp)
+    target_compile_definitions(uktextnorm PRIVATE NORMALIZE_UK_CPP_VERSION="${PROJECT_VERSION}")
 
     add_executable(rozpodil tools/rozpodil_cli.cpp)
     target_link_libraries(rozpodil PRIVATE normalize_uk_cpp::normalize_uk_cpp)
@@ -136,6 +137,13 @@ if(NORMALIZE_UK_CPP_BUILD_TESTS)
     add_executable(rozpodil_tests tests/rozpodil_tests.cpp)
     target_link_libraries(rozpodil_tests PRIVATE normalize_uk_cpp::normalize_uk_cpp)
     add_test(NAME rozpodil_tests COMMAND rozpodil_tests)
+
+    if(TARGET uktextnorm)
+        add_test(NAME uktextnorm_version COMMAND uktextnorm --version)
+        set_tests_properties(uktextnorm_version PROPERTIES
+            PASS_REGULAR_EXPRESSION "uktextnorm ${PROJECT_VERSION}"
+        )
+    endif()
 endif()
 
 add_executable(uktextnorm_benchmark EXCLUDE_FROM_ALL benchmarks/uktextnorm_benchmark.cpp)
@@ -143,6 +151,7 @@ target_link_libraries(uktextnorm_benchmark PRIVATE normalize_uk_cpp::normalize_u
 
 if(NORMALIZE_UK_CPP_BUILD_PYTHON)
     find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development.Module)
+    set(PYBIND11_FINDPYTHON ON)
     find_package(pybind11 CONFIG QUIET)
 
     if(NOT pybind11_FOUND)
@@ -179,6 +188,15 @@ if(NORMALIZE_UK_CPP_BUILD_PYTHON)
             $<TARGET_FILE_DIR:normalize_uk_python>
         VERBATIM
     )
+
+    if(NORMALIZE_UK_CPP_BUILD_TESTS)
+        add_test(NAME normalize_uk_python_tests
+            COMMAND Python::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tests/python_binding_tests.py
+        )
+        set_tests_properties(normalize_uk_python_tests PROPERTIES
+            ENVIRONMENT "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}"
+        )
+    endif()
 
     install(TARGETS normalize_uk_python
         LIBRARY DESTINATION normalize_uk

@@ -97,6 +97,7 @@ int main()
         {"query string", "https://example.com/a?x=1&y=2&&&&"},
         {"compact finance", "BTC/UAH ETH/USD 000000000000000000000001 BTC"},
         {"measurement soup", "999999999999999999999999 кг 1,23456789 мг/мл -999999999999999999999999%"},
+        {"range soup", "999999999999999999999999–1000000000000000000000000 °C, -5,5–+7,25 кг, 10:30–12:45, 1/0–3/4"},
     };
 
     for (const auto& [name, text] : cases) {

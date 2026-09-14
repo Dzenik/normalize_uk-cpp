@@ -41,9 +41,7 @@ jobs:
           CIBW_ARCHS_MACOS: "auto64"
           CIBW_ARCHS_LINUX: "auto64"
           CIBW_ARCHS_WINDOWS: "auto64"
-          CIBW_TEST_COMMAND: >-
-            python -c "import normalize_uk as n;
-            assert n.number_to_words(123)"
+          CIBW_TEST_COMMAND: python {project}/tests/python_binding_tests.py
 
       - name: Upload wheel artifacts
         uses: actions/upload-artifact@v4

@@ -63,6 +63,9 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
 
     text = normalize_unicode(std::move(text), options.quote_style);
     text = normalize_typography(std::move(text));
+    if (maybe_digits() && contains_any_token(text, {"стор.", "Стор.", "с.", "С."})) {
+        text = normalize_page_ranges(std::move(text), options.range_style);
+    }
     if (options.repair_homoglyphs && has_ascii_alpha(text)) {
         text = normalize_homoglyphs(std::move(text));
     }
@@ -85,12 +88,10 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
             text = normalize_ip_addresses(std::move(text));
         }
         text = normalize_identifiers(std::move(text));
-        if (contains_any(text, "-–—%") || contains_any_token(text, {" рр", "роки", "стор.", "с."})) {
-            text = normalize_ranges(std::move(text), options.range_style);
-        }
-        text = normalize_dates(std::move(text), options.date_style, options.validate_dates);
+        text = normalize_ranges(std::move(text), options.range_style);
+        text = normalize_dates(std::move(text), options.date_style, options.validate_dates, options.range_style);
         text = normalize_discourse_dates(std::move(text));
-        if (contains_any(text, "/°№") || contains_any_token(text, {"мм рт", "раз", "тиск"})) {
+        if (contains_any(text, "/°№℃℉") || contains_any_token(text, {"мм рт", "раз", "тиск", "градус"})) {
             text = normalize_medical(std::move(text));
         }
         text = normalize_counted_noun_context(std::move(text));
