@@ -723,42 +723,47 @@ std::string normalize_ordinals(std::string text)
                                                                                   {"ими", "ins_pl"}};
     static const std::unordered_set<std::string> stop = {
         "CD", "DVD", "MD", "DC", "MC", "MI", "MM", "DI", "DIV", "MIX", "CIV", "LCD"};
-    text =
-        ctre_sub<R"((\d+)(?:-|–|—)(ими|им|ім|ою|ій|го|му|й|м|а|у|е|х)(?![А-Яа-яЄєІіЇїҐґ]))">(text, [&](const auto& m) {
-            return number_to_ordinal_words(parse_ull(cap<1>(m)), suffix_form.at(cap_string<2>(m)));
-        });
-    text = ctre_sub<
-        R"((^|[^A-Za-z])([MDCLXVI]{1,6})\s*(?:-|–|—)\s*([MDCLXVI]{1,6})\s*(?:ст\.|століття)(?![А-Яа-яЄєІіЇїҐґ]))">(
-        text, [](const auto& m) {
-            const auto start = cap_string<2>(m);
-            const auto stop = cap_string<3>(m);
-            if (!valid_roman(start) || !valid_roman(stop)) {
-                return whole_string(m);
-            }
-            return cap_string<1>(m) + number_to_ordinal_words(roman_to_int(start), "nom_n") + " " +
-                   number_to_ordinal_words(roman_to_int(stop), "nom_n") + " століття";
-        });
-    text = ctre_sub<
-        R"((^|[^A-Za-z])([MDCLXVI]{1,6})\s*(?:-|–|—)\s*([MDCLXVI]{1,6})\s*(розд\.|розділ)(?![А-Яа-яЄєІіЇїҐґ]))">(
-        text, [](const auto& m) {
-            const auto start = cap_string<2>(m);
-            const auto stop = cap_string<3>(m);
-            if (!valid_roman(start) || !valid_roman(stop)) {
-                return whole_string(m);
-            }
-            return cap_string<1>(m) + number_to_ordinal_words(roman_to_int(start), "nom_m") + " " +
-                   number_to_ordinal_words(roman_to_int(stop), "nom_m") + " розділ";
-        });
-    text =
-        ctre_sub<R"((^|[^A-Za-z])([MDCLXVI]{1,6})\s*(?:ст\.|століття)(?![А-Яа-яЄєІіЇїҐґ]))">(text, [](const auto& m) {
-            const auto tok = cap_string<2>(m);
-            if (!valid_roman(tok)) {
-                return whole_string(m);
-            }
-            return cap_string<1>(m) + number_to_ordinal_words(roman_to_int(tok), "nom_n") + " століття";
-        });
-    return ctre_sub<R"(\b[MDCLXVI]{2,}\b)">(text, [&](const auto& m) {
-        const auto tok = whole_string(m);
+    // Keep these patterns in std::regex rather than CTRE. The CTRE expansion
+    // for these UTF-8 lookahead/alternation expressions has high runtime stack
+    // usage; on the default 1 MiB Windows executable stack even a short input
+    // can terminate with STATUS_STACK_OVERFLOW.
+    static const std::regex ordinal_suffix(R"((\d+)(?:-|–|—)(ими|им|ім|ою|ій|го|му|й|м|а|у|е|х)(?![А-Яа-яЄєІіЇїҐґ]))");
+    text = regex_sub(text, ordinal_suffix, [&](const std::smatch& m) {
+        return number_to_ordinal_words(parse_ull(m[1].str()), suffix_form.at(m[2].str()));
+    });
+    static const std::regex roman_century_range(
+        R"((^|[^A-Za-z])([MDCLXVI]{1,6})\s*(?:-|–|—)\s*([MDCLXVI]{1,6})\s*(?:ст\.|століття)(?![А-Яа-яЄєІіЇїҐґ]))");
+    text = regex_sub(text, roman_century_range, [](const std::smatch& m) {
+        const auto start = m[2].str();
+        const auto stop = m[3].str();
+        if (!valid_roman(start) || !valid_roman(stop)) {
+            return m.str();
+        }
+        return m[1].str() + number_to_ordinal_words(roman_to_int(start), "nom_n") + " " +
+               number_to_ordinal_words(roman_to_int(stop), "nom_n") + " століття";
+    });
+    static const std::regex roman_section_range(
+        R"((^|[^A-Za-z])([MDCLXVI]{1,6})\s*(?:-|–|—)\s*([MDCLXVI]{1,6})\s*(розд\.|розділ)(?![А-Яа-яЄєІіЇїҐґ]))");
+    text = regex_sub(text, roman_section_range, [](const std::smatch& m) {
+        const auto start = m[2].str();
+        const auto stop = m[3].str();
+        if (!valid_roman(start) || !valid_roman(stop)) {
+            return m.str();
+        }
+        return m[1].str() + number_to_ordinal_words(roman_to_int(start), "nom_m") + " " +
+               number_to_ordinal_words(roman_to_int(stop), "nom_m") + " розділ";
+    });
+    static const std::regex roman_century(R"((^|[^A-Za-z])([MDCLXVI]{1,6})\s*(?:ст\.|століття)(?![А-Яа-яЄєІіЇїҐґ]))");
+    text = regex_sub(text, roman_century, [](const std::smatch& m) {
+        const auto tok = m[2].str();
+        if (!valid_roman(tok)) {
+            return m.str();
+        }
+        return m[1].str() + number_to_ordinal_words(roman_to_int(tok), "nom_n") + " століття";
+    });
+    static const std::regex bare_roman(R"(\b[MDCLXVI]{2,}\b)");
+    return regex_sub(text, bare_roman, [&](const std::smatch& m) {
+        const auto tok = m.str();
         if (stop.contains(tok) || !valid_roman(tok)) {
             return tok;
         }

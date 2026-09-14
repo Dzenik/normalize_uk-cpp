@@ -28,6 +28,12 @@ jobs:
         run: cmake --build build --config Release --parallel
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
+      - name: Test normalization with a constrained native stack
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          ulimit -s 256
+          ./build/uktextnorm --preset tts-friendly "5–7 °C"
 
   sanitizers:
     runs-on: ubuntu-latest

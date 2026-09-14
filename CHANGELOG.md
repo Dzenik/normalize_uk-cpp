@@ -113,5 +113,7 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   standard designations now receive stable spoken readings.
 - Numeric dates consume an already written `року`/`р.` suffix, coordinate directions do not duplicate
   `широти`/`довготи`, and governed coordinate bounds use the genitive case.
+- Native Windows normalization no longer exhausts the default executable stack while matching ordinal and Roman
+  numeral expressions.
 
 [0.4.0]: https://github.com/ThirdLetterC/normalize_uk-cpp/releases/tag/v0.4.0
