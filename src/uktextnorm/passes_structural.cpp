@@ -156,9 +156,9 @@ std::string read_ipv6_group(std::string_view group)
     return join(parts);
 }
 
-std::string read_coordinate_number(std::string_view digits)
+std::string read_coordinate_number(std::string_view digits, char gender = 'm')
 {
-    return number_to_words(parse_ull(digits));
+    return number_words_for_gender(parse_ull(digits), gender);
 }
 
 std::string coordinate_hemisphere(std::string marker)
@@ -236,6 +236,20 @@ std::string normalize_unicode(std::string text, QuoteStyle quote_style)
         }
         if (is_apostrophe_variant(cp) && is_uk_letter(prev) && is_uk_letter(next)) {
             out.push_back('\'');
+            continue;
+        }
+        // Canonicalize visually equivalent mathematical signs and dash-like range
+        // separators before any byte-oriented regular expressions see them.
+        if (cp == U'−' || cp == U'－') {
+            out.push_back('-');
+            continue;
+        }
+        if (cp == U'＋') {
+            out.push_back('+');
+            continue;
+        }
+        if (cp == U'‐' || cp == U'‑' || cp == U'‒') {
+            append_utf8(out, U'–');
             continue;
         }
         if (is_quote_cp(cp) && quote_style != QuoteStyle::Keep) {
@@ -404,7 +418,7 @@ std::string normalize_addresses(std::string text)
                                                                        {"обл", "область"},
                                                                        {"р-н", "район"}};
     static const std::regex re(
-        R"((^|[^0-9А-Яа-яЄєІіЇїҐґ])((?:смт|просп|пров|корп|буд|вул|наб|бул|оф|кв|обл|під|пов|р-н|пр|пл|м|с|б))\.(?=\s*[A-Za-zА-Яа-яЄєІіЇїҐґ0-9]))",
+        R"((^|[^0-9А-Яа-яЄєІіЇїҐґ])((?:смт|просп|пров|корп|буд|вул|наб|бул|оф|кв|обл|під|пов|р-н|пр|пл|м|с|б(?!\.п)))\.(?=\s*[A-Za-zА-Яа-яЄєІіЇїҐґ0-9]))",
         std::regex::icase);
     return regex_sub(text, re, [](const std::smatch& m) {
         const auto key = lower_text(m[2].str());
@@ -414,6 +428,10 @@ std::string normalize_addresses(std::string text)
 
 std::string normalize_number_groups(std::string text, bool parse_thousand_separators)
 {
+    static const std::regex leading_decimal(R"((^|[^\d.,])([+\-]?)([.,])(\d+)(?![\d.,]))");
+    text = regex_sub(text, leading_decimal, [](const std::smatch& m) {
+        return m[1].str() + m[2].str() + "0" + m[3].str() + m[4].str();
+    });
     text = ctre_sub<R"(\b\d{1,3}(?: \d{3})+\b)">(text, [](const auto& m) {
         auto s = whole_string(m);
         replace_all(s, " ", "");
@@ -531,6 +549,15 @@ std::string normalize_text_with_phone_numbers(std::string text, PhoneStyle style
 
 std::string normalize_ip_addresses(std::string text)
 {
+    static const std::regex cisco_mac(
+        R"((^|[^0-9A-Fa-f])([0-9A-Fa-f]{2})([0-9A-Fa-f]{2})\.([0-9A-Fa-f]{2})([0-9A-Fa-f]{2})\.([0-9A-Fa-f]{2})([0-9A-Fa-f]{2})(?![0-9A-Fa-f]))");
+    text = regex_sub(text, cisco_mac, [](const std::smatch& m) {
+        std::vector<std::string> groups;
+        for (std::size_t i = 2; i <= 7; ++i) {
+            groups.push_back(read_ipv6_group(m[i].str()));
+        }
+        return m[1].str() + "мак адреса " + join(groups, " двокрапка ");
+    });
     static const std::regex mac(
         R"((^|[^0-9A-Fa-f])([0-9A-Fa-f]{2})[:-]([0-9A-Fa-f]{2})[:-]([0-9A-Fa-f]{2})[:-]([0-9A-Fa-f]{2})[:-]([0-9A-Fa-f]{2})[:-]([0-9A-Fa-f]{2})(?![0-9A-Fa-f]))");
     text = regex_sub(text, mac, [](const std::smatch& m) {
@@ -569,21 +596,22 @@ std::string normalize_ip_addresses(std::string text)
         return out;
     });
 
-    static const std::regex bracketed_ipv6(R"((^|[^0-9A-Fa-f:])\[([0-9A-Fa-f:]+)\](?::(\d{1,5}))?)");
-    text = regex_sub(text, bracketed_ipv6, [](const std::smatch& m) {
+    static const std::regex bracketed_ipv6_port(R"((^|[^0-9A-Fa-f:])\[([0-9A-Fa-f:]+)\]:(\d{1,5})(?!\d))");
+    text = regex_sub(text, bracketed_ipv6_port, [](const std::smatch& m) {
         const auto address = read_ipv6_address(m[2].str());
         if (!address) {
             return m.str();
         }
-        std::string out = m[1].str() + *address;
-        if (m[3].matched) {
-            const auto port = parse_int(m[3].str());
-            if (port > 65535) {
-                return m.str();
-            }
-            out += " порт " + number_to_words(static_cast<unsigned long long>(port));
+        const auto port = parse_int(m[3].str());
+        if (port > 65535) {
+            return m.str();
         }
-        return out;
+        return m[1].str() + *address + " порт " + number_to_words(static_cast<unsigned long long>(port));
+    });
+    static const std::regex bracketed_ipv6(R"((^|[^0-9A-Fa-f:])\[([0-9A-Fa-f:]+)\](?!:))");
+    text = regex_sub(text, bracketed_ipv6, [](const std::smatch& m) {
+        const auto address = read_ipv6_address(m[2].str());
+        return address ? m[1].str() + *address : m.str();
     });
 
     static const std::regex ipv6(
@@ -638,6 +666,13 @@ std::string normalize_coordinates(std::string text)
             decimal != std::string::npos && magnitude.substr(decimal + 1).find_first_not_of('0') != std::string::npos;
         return degrees > limit || (degrees == limit && nonzero_fraction);
     };
+    auto is_negative_coordinate = [](std::string_view token) {
+        if (!token.starts_with('-') && !token.starts_with("−")) {
+            return false;
+        }
+        token.remove_prefix(token.starts_with("−") ? std::string_view("−").size() : 1);
+        return token.find_first_of("123456789") != std::string_view::npos;
+    };
     auto signed_quantity = [&](const std::string& token) {
         const auto sign = token.starts_with('-') || token.starts_with("−") ? "мінус "
                           : token.starts_with('+')                         ? "плюс "
@@ -653,8 +688,8 @@ std::string normalize_coordinates(std::string text)
         if (exceeds_coordinate_limit(latitude, 90) || exceeds_coordinate_limit(longitude, 180)) {
             return m.str();
         }
-        const bool south = latitude.starts_with('-') || latitude.starts_with("−");
-        const bool west = longitude.starts_with('-') || longitude.starts_with("−");
+        const bool south = is_negative_coordinate(latitude);
+        const bool west = is_negative_coordinate(longitude);
         std::string out = m[1].str() + "географічні координати: " + decimal_coordinate(latitude) + " градуса " +
                           (south ? "південної" : "північної") + " широти, " + decimal_coordinate(longitude) +
                           " градуса " + (west ? "західної" : "східної") + " довготи";
@@ -673,9 +708,8 @@ std::string normalize_coordinates(std::string text)
             return m.str();
         }
         return m[1].str() + "широта " + decimal_coordinate(latitude) +
-               (latitude.starts_with('-') || latitude.starts_with("−") ? " південна" : " північна") + ", довгота " +
-               decimal_coordinate(longitude) +
-               (longitude.starts_with('-') || longitude.starts_with("−") ? " західна" : " східна");
+               (is_negative_coordinate(latitude) ? " південна" : " північна") + ", довгота " +
+               decimal_coordinate(longitude) + (is_negative_coordinate(longitude) ? " західна" : " східна");
     });
     static const std::regex decimal_minutes(
         R"((^|[^\d])(\d{1,3})\s*°\s*(\d{1,2})[.,](\d+)\s*(?:′|')\s*((?:N|S|E|W)|(?:пн|пд|сх|зх)\.?\s*(?:ш|д)\.?))",
@@ -690,11 +724,15 @@ std::string normalize_coordinates(std::string text)
              (minutes != 0 || m[4].str().find_first_not_of('0') != std::string::npos))) {
             return m.str();
         }
-        return m[1].str() + number_to_words(static_cast<unsigned long long>(degrees)) + " градусів " +
+        return m[1].str() + number_to_words(static_cast<unsigned long long>(degrees)) + " " +
+               plural(static_cast<unsigned long long>(degrees), {"градус", "градуси", "градусів"}) + " " +
                decimal_to_words(m[3].str(), m[4].str()) + " хвилини " + coordinate_hemisphere(m[5].str());
     });
+    // A bare integer followed by N/S/E/W is too ambiguous: N, S and W are
+    // also common SI symbols. Require either a degree sign or a decimal value.
     static const std::regex decimal(
-        R"((^|[^\d.,])((?:[+\-]|−)?)(\d{1,3})(?:[.,](\d+))?\s*(?:°)?\s*([NSEW])(?![A-Za-z]))", std::regex::icase);
+        R"((^|[^\d.,])((?:[+\-])?)(\d{1,3})(?:(?:[.,](\d+)\s*(?:°)?)|(?:°\s*))\s*([NSEW])(?![A-Za-z]))",
+        std::regex::icase);
     text = regex_sub(text, decimal, [](const std::smatch& m) {
         const auto degrees = parse_int(m[3].str());
         const auto marker = lower_text(m[5].str());
@@ -705,7 +743,6 @@ std::string normalize_coordinates(std::string text)
         if (degrees > limit || (degrees == limit && nonzero_fraction)) {
             return m.str();
         }
-        const auto sign = m[2].str() == "-" || m[2].str() == "−" ? "мінус " : m[2].str() == "+" ? "плюс " : "";
         std::string value;
         std::string unit;
         if (m[4].matched) {
@@ -713,12 +750,12 @@ std::string normalize_coordinates(std::string text)
             unit = "градуса";
         } else {
             value = number_to_words(static_cast<unsigned long long>(degrees));
-            unit = "градусів";
+            unit = plural(static_cast<unsigned long long>(degrees), {"градус", "градуси", "градусів"});
         }
-        return m[1].str() + sign + value + " " + unit + " " + coordinate_hemisphere(m[5].str());
+        return m[1].str() + value + " " + unit + " " + coordinate_hemisphere(m[5].str());
     });
     static const std::regex dms(
-        R"((^|[^\d])(\d{1,3})\s*°\s*(?:(\d{1,2})\s*(?:′|')\s*)?(?:(\d{1,2})\s*(?:″|")\s*)?((?:N|S|E|W)|(?:пн|пд|сх|зх)\.?\s*(?:ш|д)\.?|північн[а-яіїєґ]+\s+широт[а-яіїєґ]+|південн[а-яіїєґ]+\s+широт[а-яіїєґ]+|східн[а-яіїєґ]+\s+довгот[а-яіїєґ]+|західн[а-яіїєґ]+\s+довгот[а-яіїєґ]+))",
+        R"((^|[^\d])(\d{1,3})\s*°\s*(\d{1,2})\s*(?:′|')\s*(?:(\d{1,2})\s*(?:″|")\s*)?((?:N|S|E|W)|(?:пн|пд|сх|зх)\.?\s*(?:ш|д)\.?|північн[а-яіїєґ]+\s+широт[а-яіїєґ]+|південн[а-яіїєґ]+\s+широт[а-яіїєґ]+|східн[а-яіїєґ]+\s+довгот[а-яіїєґ]+|західн[а-яіїєґ]+\s+довгот[а-яіїєґ]+))",
         std::regex::icase);
     return regex_sub(text, dms, [](const std::smatch& m) {
         const auto degrees = parse_int(m[2].str());
@@ -729,14 +766,18 @@ std::string normalize_coordinates(std::string text)
             (m[4].matched && parse_int(m[4].str()) > 59)) {
             return m.str();
         }
-        std::vector<std::string> parts = {read_coordinate_number(m[2].str()), "градусів"};
+        std::vector<std::string> parts = {
+            read_coordinate_number(m[2].str()),
+            plural(static_cast<unsigned long long>(degrees), {"градус", "градуси", "градусів"})};
         if (m[3].matched) {
-            parts.push_back(read_coordinate_number(m[3].str()));
-            parts.push_back("хвилин");
+            const auto minutes = parse_int(m[3].str());
+            parts.push_back(read_coordinate_number(m[3].str(), 'f'));
+            parts.push_back(plural(static_cast<unsigned long long>(minutes), {"хвилина", "хвилини", "хвилин"}));
         }
         if (m[4].matched) {
-            parts.push_back(read_coordinate_number(m[4].str()));
-            parts.push_back("секунд");
+            const auto seconds = parse_int(m[4].str());
+            parts.push_back(read_coordinate_number(m[4].str(), 'f'));
+            parts.push_back(plural(static_cast<unsigned long long>(seconds), {"секунда", "секунди", "секунд"}));
         }
         parts.push_back(coordinate_hemisphere(m[5].str()));
         return m[1].str() + join(parts);
@@ -746,17 +787,18 @@ std::string normalize_identifiers(std::string text)
 {
     static const std::regex uuid(
         R"(\b([0-9A-Fa-f]{8})-([0-9A-Fa-f]{4})-([0-9A-Fa-f]{4})-([0-9A-Fa-f]{4})-([0-9A-Fa-f]{12})\b)");
+    static const std::regex compact_uuid(R"(\bUUID\s*[:=]?\s*([0-9A-Fa-f]{32})\b)", std::regex::icase);
     static const std::regex labelled_hash(
         R"(\b((?:SHA-?(?:1|224|256|384|512)|SHA3-?(?:256|512)|BLAKE2[bs]|MD5))\s*[:=]?\s*([0-9A-Fa-f]{16,128})\b)",
         std::regex::icase);
     static const std::regex isbn(R"(\b(ISBN(?:-1[03])?)\s*[:№#]?\s*((?:97[89][ -]?)?[0-9Xx](?:[ -]?[0-9Xx]){8,12})\b)",
                                  std::regex::icase);
-    static const std::regex issn(R"(\b(ISSN)\s*[:№#]?\s*(\d{4})[ -]?(\d{3}[\dXx])\b)", std::regex::icase);
+    static const std::regex issn(R"(\b(ISSN(?:-L)?)\s*[:№#]?\s*(\d{4})[ -]?(\d{3}[\dXx])\b)", std::regex::icase);
     static const std::regex vin(R"(\b(VIN)\s*[:№#]?\s*([A-HJ-NPR-Z0-9]{17})\b)", std::regex::icase);
     static const std::regex swift(R"(\b((?:SWIFT|BIC))\s*[:№#]?\s*([A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?)\b)",
                                   std::regex::icase);
     static const std::regex iban(R"(\bUA\s*(\d{2})(?:\s*(\d{4})){6}\s*(\d{1})\b)", std::regex::icase);
-    static const std::regex foreign_iban(R"(\b([A-Z]{2})\s*(\d{2})((?:[ ]?[A-Z0-9]){11,30})\b)", std::regex::icase);
+    static const std::regex foreign_iban(R"(\b([A-Z]{2})[ -]?(\d{2})((?:[ -]?[A-Z0-9]){11,30})\b)", std::regex::icase);
     static const std::regex edrpou(R"((ЄДРПОУ|ЄДР|код\s+ЄДРПОУ)\s*[:№#]?\s*(\d{8})\b)", std::regex::icase);
     static const std::regex tax_id(R"((РНОКПП|ІПН|податковий\s+номер)\s*[:№#]?\s*(\d{10})\b)", std::regex::icase);
     static const std::regex postcode(R"((індекс|поштовий\s+індекс)\s*[:№#]?\s*(\d{5})\b)", std::regex::icase);
@@ -771,12 +813,28 @@ std::string normalize_identifiers(std::string text)
     static const std::regex full_bank_card(
         R"((^|[^A-Za-zА-Яа-яЄєІіЇїҐґ])((?:картка|картку|карта|карту)\s+)(\d{4})[\s-]+(\d{4})[\s-]+(\d{4})[\s-]+(\d{4})(?!\d))",
         std::regex::icase);
+    static const std::regex variable_bank_card(
+        R"((^|[^A-Za-zА-Яа-яЄєІіЇїҐґ])((?:номер\s+картки|картка|картку|картки|карта|карту)\s+)(\d(?:[ -]?\d){11,18})(?!\d))",
+        std::regex::icase);
     static const std::regex plate(
         R"((^|[\s,.;:!?()])((?:А|В|Е|І|К|М|Н|О|Р|С|Т|Х){2})\s*(\d{4})\s*((?:А|В|Е|І|К|М|Н|О|Р|С|Т|Х){2})(?![А-Яа-яЄєІіЇїҐґ]))");
     text = regex_sub(text, uuid, [](const std::smatch& m) {
         std::vector<std::string> groups;
         for (std::size_t i = 1; i <= 5; ++i) {
             groups.push_back(read_code_characters(m[i].str()));
+        }
+        return "ю у ай ді " + join(groups, " дефіс ");
+    });
+    text = regex_sub(text, compact_uuid, [](const std::smatch& m) {
+        const auto value = m[1].str();
+        std::vector<std::string> groups;
+        static constexpr std::array group_spans = {std::pair<std::size_t, std::size_t>{0, 8},
+                                                   std::pair<std::size_t, std::size_t>{8, 4},
+                                                   std::pair<std::size_t, std::size_t>{12, 4},
+                                                   std::pair<std::size_t, std::size_t>{16, 4},
+                                                   std::pair<std::size_t, std::size_t>{20, 12}};
+        for (const auto& [start, length] : group_spans) {
+            groups.push_back(read_code_characters(std::string_view(value).substr(start, length)));
         }
         return "ю у ай ді " + join(groups, " дефіс ");
     });
@@ -793,7 +851,8 @@ std::string normalize_identifiers(std::string text)
         return "ай ес бі ен " + read_code_characters(value);
     });
     text = regex_sub(text, issn, [](const std::smatch& m) {
-        return "ай ес ес ен " + number_to_words_digit_by_digit(m[2].str()) + " " + read_code_characters(m[3].str());
+        const auto label = lower_text(m[1].str()).contains("-l") ? "ай ес ес ен ел " : "ай ес ес ен ";
+        return std::string(label) + number_to_words_digit_by_digit(m[2].str()) + " " + read_code_characters(m[3].str());
     });
     text = regex_sub(text, vin, [](const std::smatch& m) { return "він номер " + read_code_characters(m[2].str()); });
     text = regex_sub(text, swift, [](const std::smatch& m) { return "свіфт код " + read_code_characters(m[2].str()); });
@@ -847,6 +906,15 @@ std::string normalize_identifiers(std::string text)
         return m[1].str() + m[2].str() + number_to_words_digit_by_digit(m[3].str()) + " " +
                number_to_words_digit_by_digit(m[4].str()) + " " + number_to_words_digit_by_digit(m[5].str()) + " " +
                number_to_words_digit_by_digit(m[6].str());
+    });
+    text = regex_sub(text, variable_bank_card, [](const std::smatch& m) {
+        std::string digits;
+        for (const char ch : m[3].str()) {
+            if (ch >= '0' && ch <= '9') {
+                digits.push_back(ch);
+            }
+        }
+        return m[1].str() + m[2].str() + number_to_words_digit_by_digit(digits);
     });
     return regex_sub(text, plate, [](const std::smatch& m) {
         return m[1].str() + "номерний знак " + spell_identifier_letters(m[2].str()) + " " +

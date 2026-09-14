@@ -93,6 +93,19 @@ void expect_no_uncertain_metadata(const std::string& name,
     }
 }
 
+void expect_no_uncertain_category(const std::string& name,
+                                  const std::vector<uktextnorm::UncertainSpan>& spans,
+                                  uktextnorm::UncertaintyCategory category)
+{
+    for (const auto& span : spans) {
+        if (span.category == category) {
+            ++failures;
+            std::cerr << name << "\nunexpected category span: " << span.text << "\n";
+            return;
+        }
+    }
+}
+
 void run_golden_file(const std::string& path)
 {
     std::ifstream in(path);
@@ -776,9 +789,7 @@ int main(int argc, char** argv)
         expect_eq("homoglyphs off in conservative", normalize_ukrainian("Пoлтaвa", conservative), "Пoлтaвa");
         uktextnorm::NormalizeOptions no_validation;
         no_validation.validate_dates = false;
-        expect_eq("invalid date rejected",
-                  normalize_ukrainian("тридцять 30.02.2024"),
-                  "тридцять тридцять крапка нуль два крапка дві тисячі двадцять чотири");
+        expect_eq("invalid date rejected", normalize_ukrainian("тридцять 30.02.2024"), "тридцять 30.02.2024");
         expect_eq("invalid date accepted when validation off",
                   normalize_ukrainian("30.02.2024", no_validation),
                   "тридцяте лютого дві тисячі двадцять четвертого року");
@@ -839,6 +850,22 @@ int main(int argc, char** argv)
                               "UTC+24:00",
                               uktextnorm::UncertaintyCategory::Time,
                               uktextnorm::UncertaintySeverity::Error);
+    expect_uncertain_metadata("invalid timezone minute metadata",
+                              uktextnorm::flag_uncertain("Час UTC+02:99"),
+                              "UTC+02:99",
+                              uktextnorm::UncertaintyCategory::Time,
+                              uktextnorm::UncertaintySeverity::Error);
+    expect_uncertain_metadata("unknown contextual IANA timezone metadata",
+                              uktextnorm::flag_uncertain("Час 10:30 Europe/Paris"),
+                              "Europe/Paris",
+                              uktextnorm::UncertaintyCategory::Time,
+                              uktextnorm::UncertaintySeverity::Warning);
+    expect_no_uncertain_category("IANA timezone is not an unknown unit",
+                                 uktextnorm::flag_uncertain("Час 10:30 Europe/Paris"),
+                                 uktextnorm::UncertaintyCategory::Unit);
+    expect_no_uncertain_category("URL is not an IANA timezone",
+                                 uktextnorm::flag_uncertain("https://example.com/a"),
+                                 uktextnorm::UncertaintyCategory::Time);
     expect_uncertain_metadata("invalid geo URI metadata",
                               uktextnorm::flag_uncertain("geo:91.2,181.0"),
                               "geo:91.2,181.0",
@@ -864,6 +891,83 @@ int main(int argc, char** argv)
                               "1e+",
                               uktextnorm::UncertaintyCategory::Scientific,
                               uktextnorm::UncertaintySeverity::Warning);
+
+    const auto audit_options = uktextnorm::options_for_preset(uktextnorm::NormalizePreset::TtsFriendly);
+    expect_eq("unicode minus fraction", normalize_ukrainian("−1/2", audit_options), "мінус одна друга");
+    expect_eq("signed compound measurement",
+              normalize_ukrainian("-2,5 м/с²", audit_options),
+              "мінус дві цілих і п'ять десятих метра за секунду в квадраті");
+    expect_eq("signed percent", normalize_ukrainian("-5%", audit_options), "мінус п'ять відсотків");
+    expect_eq("latin SI product", normalize_ukrainian("3 N*m", audit_options), "три ньютони помножити на метр");
+    expect_eq(
+        "latin SI quotient", normalize_ukrainian("3 W/m²", audit_options), "три вати поділити на метр у квадраті");
+    expect_eq("ISO week duration", normalize_ukrainian("P2W", audit_options), "два тижні");
+    expect_eq(
+        "fractional ISO duration", normalize_ukrainian("PT1.5H", audit_options), "одна ціла і п'ять десятих години");
+    expect_eq("fractional ISO day", normalize_ukrainian("P0.5D", audit_options), "нуль цілих і п'ять десятих дня");
+    expect_eq("ISO duration feminine agreement",
+              normalize_ukrainian("PT1H30.5M", audit_options),
+              "одна година тридцять цілих і п'ять десятих хвилини");
+    expect_eq("malformed leading-dot ISO duration preserved", normalize_ukrainian("PT.5H", audit_options), "PT.5H");
+    expect_eq("invalid ISO duration preserved", normalize_ukrainian("P1DT", audit_options), "P1DT");
+    expect_eq("malformed scientific preserved", normalize_ukrainian("1e+", audit_options), "1e+");
+    expect_eq("bracketed IPv6 endpoint",
+              normalize_ukrainian("[2001:db8::1]:443", audit_options),
+              "ай пі версії шість два нуль нуль один двокрапка ді бі вісім двокрапка скорочення нулів двокрапка один "
+              "порт чотириста сорок три");
+    expect_eq("invalid IPv6 CIDR preserved", normalize_ukrainian("2001:db8::1/129", audit_options), "2001:db8::1/129");
+    expect_eq("balanced Markdown destination",
+              normalize_ukrainian("[5 кг](https://example.com/a_(b)?x=1)", audit_options),
+              "[п'ять кілограмів](https://example.com/a_(b)?x=1)");
+    expect_eq("double backtick code", normalize_ukrainian("``x=`5` ``", audit_options), "``x=`5` ``");
+    expect_eq("unicode hyphen temperature range",
+              normalize_ukrainian("5‐7 °C", audit_options),
+              "від п'яти до семи градусів Цельсія");
+    expect_eq("temperature range punctuation",
+              normalize_ukrainian("5-7 °C.", audit_options),
+              "від п'яти до семи градусів Цельсія.");
+    expect_eq("mixed vulgar fraction", normalize_ukrainian("2½", audit_options), "дві цілих і одна друга");
+    expect_eq("measured mixed vulgar fraction",
+              normalize_ukrainian("2½ кг", audit_options),
+              "дві цілих і одна друга кілограма");
+    expect_eq("measured fraction", normalize_ukrainian("3/4 кг", audit_options), "три четвертих кілограма");
+    expect_eq("signed leading-dot measurement",
+              normalize_ukrainian("-.5 кг", audit_options),
+              "мінус нуль цілих і п'ять десятих кілограма");
+    expect_eq("temperature tolerance",
+              normalize_ukrainian("5±0,2 °C", audit_options),
+              "п'ять плюс мінус нуль цілих і дві десятих градуса Цельсія");
+    expect_eq("bare Celsius range", normalize_ukrainian("5-7 C", audit_options), "від п'яти до семи градусів Цельсія");
+    expect_eq("midnight AM", normalize_ukrainian("12:00 AM", audit_options), "опівночі");
+    auto short_clock_options = audit_options;
+    short_clock_options.colon_style = uktextnorm::ColonStyle::Clock;
+    expect_eq("short-minute clock", normalize_ukrainian("10:5", short_clock_options), "десять годин п'ять хвилин");
+    expect_eq("invalid timezone preserved", normalize_ukrainian("10:30 UTC+14:30", audit_options), "10:30 UTC+14:30");
+    expect_eq("invalid calendar date preserved", normalize_ukrainian("29.02.2023", audit_options), "29.02.2023");
+    expect_eq(
+        "out-of-range geo URI preserved", normalize_ukrainian("geo:90.0001,180", audit_options), "geo:90.0001,180");
+    expect_eq(
+        "coordinate beats Newton symbol", normalize_ukrainian("3°N", audit_options), "три градуси північної широти");
+    expect_eq("spaced Newton symbol", normalize_ukrainian("3 °N", audit_options), "три градуси Ньютона");
+    expect_eq("legal article words", normalize_ukrainian("статті 5—7", audit_options), "від п'ятої до сьомої статті");
+    expect_eq("basis points not address", normalize_ukrainian("10 б.п.", audit_options), "десять базисних пунктів");
+    expect_eq("grouped symbol currency",
+              normalize_ukrainian("$1,234.56", audit_options),
+              "тисяча двісті тридцять чотири долари п'ятдесят шість центів");
+    expect_eq("regional currency", normalize_ukrainian("CA$5", audit_options), "п'ять канадських доларів");
+    expect_eq(
+        "case-insensitive regional currency", normalize_ukrainian("ca$5", audit_options), "п'ять канадських доларів");
+    expect_eq("single grouped currency",
+              normalize_ukrainian("$1,234", audit_options),
+              "тисяча двісті тридцять чотири долари");
+    expect_eq("accounting currency", normalize_ukrainian("($5)", audit_options), "мінус п'ять доларів");
+    expect_eq("invalid bracketed IPv6 port preserved",
+              normalize_ukrainian("[2001:db8::1]:65536", audit_options),
+              "[2001:db8::1]:65536");
+    expect_eq("invalid bare timezone preserved", normalize_ukrainian("10:30 +14:01", audit_options), "10:30 +14:01");
+    expect_eq("Cisco MAC",
+              normalize_ukrainian("aabb.ccdd.eeff", audit_options),
+              "мак адреса ей ей двокрапка бі бі двокрапка сі сі двокрапка ді ді двокрапка і і двокрапка еф еф");
 
     for (int i = 1; i < argc; ++i) {
         run_golden_file(argv[i]);

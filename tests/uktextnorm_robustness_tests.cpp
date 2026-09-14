@@ -36,6 +36,46 @@ std::size_t utf8_char_count(std::string_view text)
     return count;
 }
 
+bool valid_utf8(std::string_view text)
+{
+    for (std::size_t i = 0; i < text.size();) {
+        const auto lead = static_cast<unsigned char>(text[i]);
+        std::size_t length = 0;
+        char32_t value = 0;
+        if (lead < 0x80) {
+            length = 1;
+            value = lead;
+        } else if ((lead & 0xE0) == 0xC0) {
+            length = 2;
+            value = lead & 0x1F;
+        } else if ((lead & 0xF0) == 0xE0) {
+            length = 3;
+            value = lead & 0x0F;
+        } else if ((lead & 0xF8) == 0xF0) {
+            length = 4;
+            value = lead & 0x07;
+        } else {
+            return false;
+        }
+        if (i + length > text.size()) {
+            return false;
+        }
+        for (std::size_t j = 1; j < length; ++j) {
+            const auto continuation = static_cast<unsigned char>(text[i + j]);
+            if ((continuation & 0xC0) != 0x80) {
+                return false;
+            }
+            value = (value << 6) | (continuation & 0x3F);
+        }
+        if ((length == 2 && value < 0x80) || (length == 3 && value < 0x800) || (length == 4 && value < 0x10000) ||
+            value > 0x10FFFF || (value >= 0xD800 && value <= 0xDFFF)) {
+            return false;
+        }
+        i += length;
+    }
+    return true;
+}
+
 void exercise_one(const std::string& name, const std::string& text)
 {
     const std::vector<uktextnorm::NormalizePreset> presets = {uktextnorm::NormalizePreset::Default,
@@ -48,6 +88,9 @@ void exercise_one(const std::string& name, const std::string& text)
             const auto normalized = uktextnorm::normalize_ukrainian(text, preset);
             if (!text.empty() && normalized.empty()) {
                 fail(name, "normalization returned empty output for non-empty input");
+            }
+            if (!valid_utf8(normalized)) {
+                fail(name, "normalization returned invalid UTF-8");
             }
         } catch (const std::exception& ex) {
             fail(name, std::string("normalize_ukrainian threw: ") + ex.what());
@@ -104,8 +147,22 @@ int main()
         exercise_one(name, text);
     }
 
-    const std::vector<std::string> idempotent_cases = {
-        "5 кг", "2026-09", "10.0.0.0/24", "0.5 DOGE", "<speak>5 кг</speak>", "6.02×10²³", "ст. 5–7", "-1/2"};
+    const std::vector<std::string> idempotent_cases = {"5 кг",
+                                                       "2026-09",
+                                                       "10.0.0.0/24",
+                                                       "0.5 DOGE",
+                                                       "<speak>5 кг</speak>",
+                                                       "6.02×10²³",
+                                                       "ст. 5–7",
+                                                       "-1/2",
+                                                       "−1/2",
+                                                       "-2,5 м/с²",
+                                                       "PT1.5H",
+                                                       "[2001:db8::1]:443",
+                                                       "[5 кг](https://example.com/a_(b)?x=1)",
+                                                       "5‐7 °C",
+                                                       "$1,234.56",
+                                                       "3 N*m"};
     for (const auto& text : idempotent_cases) {
         const auto once = uktextnorm::normalize_ukrainian(text, uktextnorm::NormalizePreset::TtsFriendly);
         const auto twice = uktextnorm::normalize_ukrainian(once, uktextnorm::NormalizePreset::TtsFriendly);

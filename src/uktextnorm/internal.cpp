@@ -176,11 +176,14 @@ bool has_roman_candidate(std::string_view text)
 
 bool has_currency_candidate(std::string_view text)
 {
-    return contains_any(text, "$€£₴₽₩") || contains_any_token(text, {"zł", "¥", "元", "Kč", "₺", "₹", "R$"}) ||
-           contains_any_token(text, {"грн", "UAH", "USD",  "EUR", "GBP", "PLN",   "CHF",  "JPY",  "CNY",  "CZK",
-                                     "CAD", "AUD", "SEK",  "NOK", "DKK", "TRY",   "INR",  "RUB",  "KRW",  "BRL",
-                                     "ZAR", "NZD", "MXN",  "SGD", "HKD", "долар", "євро", "фунт", "злот", "франк",
-                                     "єн",  "юан", "крон", "лір", "руп", "рубл",  "вон",  "реал", "ранд"});
+    if (contains_any(text, "$€£₴₽₩") || contains_any_token(text, {"zł", "¥", "元", "Kč", "₺", "₹", "R$"})) {
+        return true;
+    }
+    const auto lowered = lower_text(text);
+    return contains_any_token(lowered, {"грн", "uah", "usd",  "eur", "gbp", "pln",   "chf",  "jpy",  "cny",  "czk",
+                                        "cad", "aud", "sek",  "nok", "dkk", "try",   "inr",  "rub",  "krw",  "brl",
+                                        "zar", "nzd", "mxn",  "sgd", "hkd", "долар", "євро", "фунт", "злот", "франк",
+                                        "єн",  "юан", "крон", "лір", "руп", "рубл",  "вон",  "реал", "ранд"});
 }
 
 bool has_symbol_candidate(std::string_view text)
@@ -577,7 +580,7 @@ const std::regex& counted_nouns_re()
 
 const std::regex& measurements_re()
 {
-    static const std::regex re(R"((^|[^\d.,])(\d+(?:[.,]\d+)?)\s*()" + unit_alt() +
+    static const std::regex re(R"((^|[^\d.,+\-])([+\-]?\d+(?:[.,]\d+)?)\s*()" + unit_alt() +
                                R"()\.?(?![A-Za-zА-Яа-яЄєІіЇїҐґ]))");
     return re;
 }
@@ -1129,20 +1132,26 @@ std::string say_fraction(unsigned long long num, unsigned long long den)
 }
 std::string read_measurement_quantity(std::string_view num, const Measurement& meas)
 {
+    std::string sign;
+    if (!num.empty() && (num.front() == '+' || num.front() == '-')) {
+        sign = num.front() == '-' ? "мінус " : "плюс ";
+        num.remove_prefix(1);
+    }
     const auto pos = num.find_first_of(".,");
     if (pos != std::string_view::npos) {
-        auto words = decimal_to_words(num.substr(0, pos), num.substr(pos + 1));
-        return words.empty() ? std::string(num) : words + " " + std::string(meas.decimal);
+        const auto integer = num.substr(0, pos).empty() ? std::string_view("0") : num.substr(0, pos);
+        auto words = decimal_to_words(integer, num.substr(pos + 1));
+        return words.empty() ? sign + std::string(num) : sign + words + " " + std::string(meas.decimal);
     }
     const auto n = try_parse_ull(num);
     if (!n) {
-        return number_to_words_digit_by_digit(num) + " " + std::string(meas.many);
+        return sign + number_to_words_digit_by_digit(num) + " " + std::string(meas.many);
     }
     auto words = split_words(number_to_words(*n));
     if (meas.gender == 'f') {
         feminine_last(words);
     }
-    return join(words) + " " + plural(*n, {meas.one, meas.few, meas.many});
+    return sign + join(words) + " " + plural(*n, {meas.one, meas.few, meas.many});
 }
 const std::unordered_map<std::string, FinanceUnit>& finance_units()
 {

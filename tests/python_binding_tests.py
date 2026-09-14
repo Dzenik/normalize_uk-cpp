@@ -112,6 +112,31 @@ class NormalizeUkBindingTests(unittest.TestCase):
             "[п'ять кілограмів](https://example.com?a=1&amp;b=2)",
         )
 
+    def test_regressions_for_mixed_structured_text(self) -> None:
+        cases = {
+            "−1/2": "мінус одна друга",
+            "-2,5 м/с²": "мінус дві цілих і п'ять десятих метра за секунду в квадраті",
+            "PT1.5H": "одна ціла і п'ять десятих години",
+            "[2001:db8::1]:443": (
+                "ай пі версії шість два нуль нуль один двокрапка ді бі вісім "
+                "двокрапка скорочення нулів двокрапка один порт чотириста сорок три"
+            ),
+            "$1,234.56": "тисяча двісті тридцять чотири долари п'ятдесят шість центів",
+            "CA$5": "п'ять канадських доларів",
+        }
+        for source, expected in cases.items():
+            with self.subTest(source=source):
+                self.assertEqual(nuk.normalize_ukrainian(source, self.options), expected)
+
+        self.assertEqual(
+            nuk.normalize_ukrainian("[5 кг](https://example.com/a_(b))", self.options),
+            "[п'ять кілограмів](https://example.com/a_(b))",
+        )
+        self.assertEqual(
+            nuk.normalize_ukrainian("``код `5 кг` тут``", self.options),
+            "``код `5 кг` тут``",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

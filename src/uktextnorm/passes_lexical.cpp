@@ -64,12 +64,30 @@ std::string normalize_currency(std::string text)
         bool sub_fem = false;
         std::vector<std::regex> patterns;
     };
-    static const std::regex signed_prefix("([+-])\\s*(" + currency_token_alt() + ")\\s*(?=\\d)");
+    static const std::unordered_map<std::string, std::string_view> regional_aliases = {{"us$", "USD"},
+                                                                                       {"ca$", "CAD"},
+                                                                                       {"au$", "AUD"},
+                                                                                       {"nz$", "NZD"},
+                                                                                       {"hk$", "HKD"},
+                                                                                       {"sg$", "SGD"},
+                                                                                       {"jp¥", "JPY"},
+                                                                                       {"cn¥", "CNY"},
+                                                                                       {"r$", "BRL"}};
+    static const std::regex regional_alias(R"((US\$|CA\$|AU\$|NZ\$|HK\$|SG\$|JP¥|CN¥|R\$))", std::regex::icase);
+    text = regex_sub(text, regional_alias, [](const std::smatch& m) {
+        return std::string(regional_aliases.at(lower_text(m.str())));
+    });
+    static const std::regex signed_prefix("([+-])\\s*(" + currency_token_alt() + ")\\s*(?=\\d)", std::regex::icase);
     text = regex_sub(text, signed_prefix, [](const std::smatch& m) { return m[2].str() + m[1].str(); });
-    static const std::regex accounting("\\((\\d+(?:[.,]\\d{1,2})?)\\s*(" + currency_token_alt() + ")\\)");
+    static const std::regex accounting_prefix("\\((" + currency_token_alt() + ")\\s*(\\d+(?:[.,]\\d{1,2})?)\\)",
+                                              std::regex::icase);
+    text = regex_sub(text, accounting_prefix, [](const std::smatch& m) { return "-" + m[2].str() + " " + m[1].str(); });
+    static const std::regex accounting("\\((\\d+(?:[.,]\\d{1,2})?)\\s*(" + currency_token_alt() + ")\\)",
+                                       std::regex::icase);
     text = regex_sub(text, accounting, [](const std::smatch& m) { return "-" + m[1].str() + " " + m[2].str(); });
     static const std::vector<Currency> currencies = [] {
-        static constexpr std::string_view amount = R"(([+-]?(?:\d+[.,]\d{1,2}|\d+|[.,]\d{1,2})(?!\d|[.,]\d)))";
+        static constexpr std::string_view amount =
+            R"(([+-]?(?:[1-9]\d{0,2}(?:,\d{3})+(?:\.\d{1,2})?|[1-9]\d{0,2}(?:\.\d{3})+(?:,\d{1,2})?|\d+[.,]\d{1,2}|\d+|[.,]\d{1,2})(?!\d|[.,]\d)))";
         std::vector<Currency> out;
         for (const auto& entry : lexicon::kCurrencies) {
             Currency c;
@@ -88,17 +106,21 @@ std::string normalize_currency(std::string text)
             const bool has_symbol = !symbol.empty();
             if (has_word && has_symbol) {
                 c.patterns.emplace_back(std::string(amount) + R"(\s*()" + std::string(entry.word_re) +
-                                        R"((?![а-яіїєґ])|)" + symbol + ")");
+                                            R"((?![а-яіїєґ])|)" + symbol + ")",
+                                        std::regex::icase);
             } else if (has_word) {
                 c.patterns.emplace_back(std::string(amount) + R"(\s*()" + std::string(entry.word_re) +
-                                        R"((?![а-яіїєґ])))");
+                                            R"((?![а-яіїєґ])))",
+                                        std::regex::icase);
             } else if (has_symbol) {
                 c.patterns.emplace_back(std::string(amount) + R"(\s*(?:)" + symbol + ")");
             }
             c.patterns.emplace_back(std::string(amount) + R"(\s*)" + std::string(entry.code) +
-                                    R"((?![A-Za-zА-Яа-яЄєІіЇїҐґ]))");
+                                        R"((?![A-Za-zА-Яа-яЄєІіЇїҐґ]))",
+                                    std::regex::icase);
             c.patterns.emplace_back(std::string(entry.code) + R"(\s*)" + std::string(amount) +
-                                    R"((?![A-Za-zА-Яа-яЄєІіЇїҐґ]))");
+                                        R"((?![A-Za-zА-Яа-яЄєІіЇїҐґ]))",
+                                    std::regex::icase);
             if (has_symbol) {
                 c.patterns.emplace_back(symbol + R"(\s*)" + std::string(amount));
                 if (entry.trailing_symbol) {
@@ -115,6 +137,31 @@ std::string normalize_currency(std::string text)
         if (!amount_text.empty() && (amount_text.front() == '+' || amount_text.front() == '-')) {
             sign = amount_text.front() == '-' ? "мінус " : "плюс ";
             amount_text.erase(amount_text.begin());
+        }
+        const auto comma = amount_text.rfind(',');
+        const auto dot = amount_text.rfind('.');
+        if (comma != std::string::npos && dot != std::string::npos) {
+            const char decimal_separator = comma > dot ? ',' : '.';
+            const char grouping_separator = decimal_separator == ',' ? '.' : ',';
+            std::erase(amount_text, grouping_separator);
+        } else {
+            const char separator = comma != std::string::npos ? ',' : '.';
+            const auto first = amount_text.find(separator);
+            const auto last = amount_text.rfind(separator);
+            if (first != std::string::npos && first != last) {
+                const auto trailing = amount_text.size() - last - 1;
+                std::string normalized;
+                normalized.reserve(amount_text.size());
+                for (std::size_t i = 0; i < amount_text.size(); ++i) {
+                    if (amount_text[i] != separator || (i == last && trailing <= 2)) {
+                        normalized.push_back(amount_text[i]);
+                    }
+                }
+                amount_text = std::move(normalized);
+            } else if (first != std::string::npos && first >= 1 && first <= 3 && amount_text.front() != '0' &&
+                       amount_text.size() - first - 1 == 3) {
+                amount_text.erase(first, 1);
+            }
         }
         const auto pos = amount_text.find_first_of(".,");
         const auto main_text =

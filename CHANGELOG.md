@@ -69,5 +69,17 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Multiple occurrences of the same currency in one input are all normalized.
 - ISBN-10/13, ISSN, IBAN, payment-card, VIN, UUID, and labeled hash candidates now receive checksum, length, version,
   or variant validation and error-level uncertainty metadata when invalid.
+- Unicode minus and Unicode hyphen variants are canonicalized without producing malformed UTF-8, including in
+  signed fractions, percentages, measurements, and temperature ranges.
+- Signed and leading-dot compound measurements, Latin SI aliases, parenthesized denominators, tolerances, and
+  measured fractions now normalize consistently.
+- Fractional and week-based ISO durations are supported; malformed scientific notation and invalid structured values
+  are preserved instead of being partially normalized.
+- Bracketed IPv6 endpoints, Cisco-style MAC addresses, compact labeled UUIDs, ISSN-L values, hyphenated IBANs, and
+  labeled 12–19 digit payment-card numbers are recognized without cross-parser collisions.
+- Regional currency symbols, lowercase currency codes, locale-grouped amounts, and symbol-prefixed accounting values
+  now resolve to the intended currency and sign.
+- Markdown destinations with balanced parentheses and double-backtick code spans remain opaque during normalization.
+- Legal ranges with word labels, dotted subpoints, and paragraph symbols now honor `RangeStyle.FromTo`.
 
 [0.4.0]: https://github.com/ThirdLetterC/normalize_uk-cpp/releases/tag/v0.4.0
