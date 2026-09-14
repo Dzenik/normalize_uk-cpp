@@ -26,6 +26,16 @@ class NormalizeUkBindingTests(unittest.TestCase):
             "від п'яти цілих і п'яти десятих до семи цілих і п'яти десятих градуса Цельсія",
         )
 
+    def test_temperature_scales_beyond_celsius_and_fahrenheit(self) -> None:
+        cases = {
+            "250–300 K": "від двохсот п'ятдесяти до трьохсот кельвінів",
+            "5–7 °R": "від п'яти до семи градусів Ранкіна",
+            "5–7 °Ré": "від п'яти до семи градусів Реомюра",
+        }
+        for source, expected in cases.items():
+            with self.subTest(source=source):
+                self.assertEqual(nuk.normalize_ukrainian(source, self.options), expected)
+
 
 if __name__ == "__main__":
     unittest.main()

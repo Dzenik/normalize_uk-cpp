@@ -91,7 +91,8 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
         text = normalize_ranges(std::move(text), options.range_style);
         text = normalize_dates(std::move(text), options.date_style, options.validate_dates, options.range_style);
         text = normalize_discourse_dates(std::move(text));
-        if (contains_any(text, "/°№℃℉") || contains_any_token(text, {"мм рт", "раз", "тиск", "градус"})) {
+        if (contains_any(text, "/°№℃℉K") ||
+            contains_any_token(text, {"мм рт", "раз", "тиск", "градус", "K", "К", "кельвін"})) {
             text = normalize_medical(std::move(text));
         }
         text = normalize_counted_noun_context(std::move(text));

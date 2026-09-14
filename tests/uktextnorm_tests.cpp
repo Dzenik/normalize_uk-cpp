@@ -348,6 +348,31 @@ int main(int argc, char** argv)
     expect_eq("unicode temperature symbols",
               normalize_ukrainian("5–7 ℃ і 8–9 ℉", range_options),
               "від п'яти до семи градусів Цельсія і від восьми до дев'яти градусів Фаренгейта");
+    expect_eq("standalone kelvin", normalize_ukrainian("273 K", range_options), "двісті сімдесят три кельвіни");
+    expect_eq("unicode kelvin sign", normalize_ukrainian("273 K", range_options), "двісті сімдесят три кельвіни");
+    expect_eq("legacy degree kelvin", normalize_ukrainian("273 °K", range_options), "двісті сімдесят три кельвіни");
+    expect_eq("kelvin range",
+              normalize_ukrainian("250–300 K", range_options),
+              "від двохсот п'ятдесяти до трьохсот кельвінів");
+    expect_eq("signed kelvin range",
+              normalize_ukrainian("-5–+7 K", range_options),
+              "від мінус п'яти до плюс семи кельвінів");
+    expect_eq("decimal kelvin range",
+              normalize_ukrainian("1,5–2,5 K", range_options),
+              "від однієї цілої і п'яти десятих до двох цілих і п'яти десятих кельвіна");
+    expect_eq("repeated kelvin range",
+              normalize_ukrainian("від 250 K до 300 K", range_options),
+              "від двохсот п'ятдесяти до трьохсот кельвінів");
+    expect_eq("rankine range", normalize_ukrainian("5–7 °R", range_options), "від п'яти до семи градусів Ранкіна");
+    expect_eq("reaumur range", normalize_ukrainian("5–7 °Ré", range_options), "від п'яти до семи градусів Реомюра");
+    expect_eq("delisle range", normalize_ukrainian("5–7 °De", range_options), "від п'яти до семи градусів Деліля");
+    expect_eq("romer range", normalize_ukrainian("5–7 °Rø", range_options), "від п'яти до семи градусів Ремера");
+    expect_eq("newton named range",
+              normalize_ukrainian("5–7 градусів Ньютона", range_options),
+              "від п'яти до семи градусів Ньютона");
+    expect_eq("mixed temperature scales",
+              normalize_ukrainian("5 °C–7 K", range_options),
+              "від п'яти градусів Цельсія до семи кельвінів");
     expect_eq("repeated temperature units",
               normalize_ukrainian("5°C–7°C", range_options),
               "від п'яти до семи градусів Цельсія");
