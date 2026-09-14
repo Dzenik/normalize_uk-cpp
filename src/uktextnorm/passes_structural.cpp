@@ -569,7 +569,7 @@ std::string normalize_ip_addresses(std::string text)
     });
 
     static const std::regex ipv4(
-        R"((^|[^\d.])(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?:/(\d{1,3}))?(?::(\d{1,5}))?(?![\d.:/]))");
+        R"((^|[^\d.])(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?:/(\d{1,3}))?(?::(\d{1,5}))?(?![\d:/]|\.\d))");
     text = regex_sub(text, ipv4, [](const std::smatch& m) {
         if (preceded_by_version_label(m.prefix().str())) {
             return m.str();

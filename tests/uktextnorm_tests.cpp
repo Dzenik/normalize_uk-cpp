@@ -119,6 +119,9 @@ void run_golden_file(const std::string& path)
     std::size_t row = 0;
     while (std::getline(in, line)) {
         ++row;
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
         if (line.empty() || line[0] == '#') {
             continue;
         }

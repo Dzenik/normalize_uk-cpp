@@ -135,6 +135,12 @@ if(NORMALIZE_UK_CPP_BUILD_TESTS)
     target_link_libraries(uktextnorm_robustness_tests PRIVATE normalize_uk_cpp::normalize_uk_cpp)
     add_test(NAME uktextnorm_robustness_tests COMMAND uktextnorm_robustness_tests)
 
+    add_executable(uktextnorm_sentence_tests tests/uktextnorm_sentence_tests.cpp)
+    target_link_libraries(uktextnorm_sentence_tests PRIVATE normalize_uk_cpp::normalize_uk_cpp)
+    add_test(NAME uktextnorm_sentence_tests COMMAND uktextnorm_sentence_tests
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/uktextnorm_sentence_golden.tsv
+    )
+
     add_executable(rozpodil_tests tests/rozpodil_tests.cpp)
     target_link_libraries(rozpodil_tests PRIVATE normalize_uk_cpp::normalize_uk_cpp)
     add_test(NAME rozpodil_tests COMMAND rozpodil_tests)

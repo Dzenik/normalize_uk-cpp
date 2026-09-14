@@ -48,6 +48,8 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Cross-platform CI for Linux, macOS, and Windows, plus Clang AddressSanitizer and UndefinedBehaviorSanitizer checks.
 - A Clang/libFuzzer harness covering every preset and uncertainty scanning, with a sanitizer CI smoke test.
 - CLI integration tests, expanded Python binding tests, and normalization idempotence coverage.
+- Full-sentence TTS golden tests with 56 cases across 28 normalization categories and an idempotence assertion for every
+  sentence.
 
 ### Changed
 
@@ -55,6 +57,10 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Finance normalization is generated from the finance lexicon instead of using a fixed ticker list.
 - Unicode token detection now compares complete code points instead of individual UTF-8 bytes.
 - Numeric dates governed by `від`, `до`, `з`, `із`, `після`, or `станом на` now use the Ukrainian genitive day form.
+- Sentence-initial numeric governors such as `До`, `Від`, and `Близько` now apply the same grammatical cases as their
+  lowercase forms.
+- IPv4 addresses, CIDR blocks, and endpoints are recognized immediately before sentence-ending punctuation.
+- Golden TSV fixtures are pinned to LF in Git and their readers also accept CRLF checkouts on Windows.
 - IPv6 zero compression is pronounced explicitly as `скорочення нулів`.
 - Soft-stem ordinal inflection now produces forms such as `третя` and `третього`.
 
