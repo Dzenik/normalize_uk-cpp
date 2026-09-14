@@ -367,9 +367,9 @@ std::string normalize_sections(std::string text)
 }
 std::string normalize_symbols(std::string text)
 {
-    static const std::vector<std::pair<std::string, std::string>> symbols = {{"°C", "градусів цельсія"},
-                                                                             {"°С", "градусів цельсія"},
-                                                                             {"°F", "градусів фаренгейта"},
+    static const std::vector<std::pair<std::string, std::string>> symbols = {{"°C", "градусів Цельсія"},
+                                                                             {"°С", "градусів Цельсія"},
+                                                                             {"°F", "градусів Фаренгейта"},
                                                                              {"±", "плюс мінус"},
                                                                              {"≈", "приблизно дорівнює"},
                                                                              {"≠", "не дорівнює"},

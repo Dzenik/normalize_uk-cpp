@@ -4,6 +4,51 @@
 
 namespace uktextnorm::detail {
 
+namespace {
+
+std::string take_spoken_sign(std::string_view& token)
+{
+    if (token.starts_with("-")) {
+        token.remove_prefix(1);
+        return "мінус ";
+    }
+    if (token.starts_with("−")) {
+        token.remove_prefix(std::string_view("−").size());
+        return "мінус ";
+    }
+    if (token.starts_with("+")) {
+        token.remove_prefix(1);
+        return "плюс ";
+    }
+    return {};
+}
+
+std::string signed_integer_words(std::string_view token, std::string_view grammatical_case)
+{
+    const auto sign = take_spoken_sign(token);
+    const auto words = grammatical_case == "nom" ? number_to_words(parse_ull(token))
+                                                 : number_to_words_case(parse_ull(token), grammatical_case);
+    return sign + words;
+}
+
+std::string temperature_scale_name(std::string_view scale)
+{
+    return scale == "F" || scale == "f" || lower_text(scale).contains("фаренгейт") ? "Фаренгейта" : "Цельсія";
+}
+
+std::string temperature_quantity_words(std::string_view token)
+{
+    const auto sign = take_spoken_sign(token);
+
+    if (const auto pos = token.find_first_of(".,"); pos != std::string::npos) {
+        return sign + decimal_to_words(token.substr(0, pos), token.substr(pos + 1)) + " градуса";
+    }
+    const auto n = parse_ull(token);
+    return sign + number_to_words(n) + " " + plural(n, {"градус", "градуси", "градусів"});
+}
+
+} // namespace
+
 std::string normalize_dates(std::string text, DateStyle style, bool validate)
 {
     static const std::array<std::string_view, 12> months = {"січня",
@@ -248,6 +293,29 @@ std::string normalize_quarters(std::string text)
 
 std::string normalize_ranges(std::string text, RangeStyle style)
 {
+    static const std::regex explicit_temperature_range(
+        R"((^|[^\d.,+\-−])від\s+((?:\+|-|−)?\d+)\s+до\s+((?:\+|-|−)?\d+)\s*°\s*([CСF])(?![A-Za-zА-Яа-яЄєІіЇїҐґ]))",
+        std::regex::icase);
+    static const std::regex symbol_temperature_range(
+        R"((^|[^\d.,+\-−])((?:\+|-|−)?\d+)\s*(?:-|–|—)\s*((?:\+|-|−)?\d+)\s*°\s*([CСF])(?![A-Za-zА-Яа-яЄєІіЇїҐґ]))",
+        std::regex::icase);
+    static const std::regex named_temperature_range(
+        R"((^|[^\d.,+\-−])((?:\+|-|−)?\d+)\s*(?:-|–|—)\s*((?:\+|-|−)?\d+)\s+градус(?:а|и|ів)?\s+(Цельсія|Фаренгейта)(?![А-Яа-яЄєІіЇїҐґ]))",
+        std::regex::icase);
+    auto say_temperature_range = [style](const std::smatch& m, bool explicitly_from_to) {
+        const auto grammatical_case = style == RangeStyle::FromTo || explicitly_from_to ? "gen" : "nom";
+        const auto low = signed_integer_words(m[2].str(), grammatical_case);
+        const auto high = signed_integer_words(m[3].str(), grammatical_case);
+        const auto connector =
+            style == RangeStyle::FromTo || explicitly_from_to ? "від " + low + " до " + high : low + " " + high;
+        return m[1].str() + connector + " градусів " + temperature_scale_name(m[4].str());
+    };
+    text = regex_sub(
+        text, explicit_temperature_range, [&](const std::smatch& m) { return say_temperature_range(m, true); });
+    text = regex_sub(
+        text, symbol_temperature_range, [&](const std::smatch& m) { return say_temperature_range(m, false); });
+    text =
+        regex_sub(text, named_temperature_range, [&](const std::smatch& m) { return say_temperature_range(m, false); });
     text = ctre_sub<R"(\b(\d{3,4})\s*(?:-|–|—)\s*(\d{3,4})\s*(?:рр\.?|роки)(?![а-яіїєґ]))">(text, [&](const auto& m) {
         if (style == RangeStyle::FromTo) {
             return "від " + number_to_ordinal_words(parse_ull(cap<1>(m)), "gen") + " до " +
@@ -523,18 +591,10 @@ std::string normalize_medical(std::string text)
         return m[1].str() + number_to_words(parse_ull(m[2].str())) + " на " + number_to_words(parse_ull(m[3].str())) +
                " міліметрів ртутного стовпа";
     });
-    text = ctre_sub<R"((^|[^\d.,])(\d+(?:[.,]\d+)?)\s*°\s*([CСF])\b)">(text, [](const auto& m) {
-        const auto num = cap_string<2>(m);
-        std::string words;
-        if (const auto pos = num.find_first_of(".,"); pos != std::string::npos) {
-            words = decimal_to_words(std::string_view(num).substr(0, pos), std::string_view(num).substr(pos + 1)) +
-                    " градуса";
-        } else {
-            const auto n = parse_ull(num);
-            words = number_to_words(n) + " " + plural(n, {"градус", "градуси", "градусів"});
-        }
-        const auto scale = cap_string<3>(m);
-        return cap_string<1>(m) + words + (scale == "F" ? " фаренгейта" : " цельсія");
+    static const std::regex temperature(
+        R"((^|[^\d.,+\-−])((?:\+|-|−)?\d+(?:[.,]\d+)?)\s*°\s*([CСF])(?![A-Za-zА-Яа-яЄєІіЇїҐґ]))", std::regex::icase);
+    text = regex_sub(text, temperature, [](const std::smatch& m) {
+        return m[1].str() + temperature_quantity_words(m[2].str()) + " " + temperature_scale_name(m[3].str());
     });
     text = regex_sub(text, frequency, [](const std::smatch& m) {
         const auto n = parse_ull(m[2].str());

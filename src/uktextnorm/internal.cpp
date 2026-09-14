@@ -523,7 +523,7 @@ const std::regex& date_spelled_re()
 
 const std::regex& range_units_re()
 {
-    static const std::regex re("(^|[^\\d])(\\d+)\\s*[-–—]\\s*(\\d+)\\s*(" + unit_alt() +
+    static const std::regex re("(^|[^\\d])(\\d+)\\s*(?:-|–|—)\\s*(\\d+)\\s*(" + unit_alt() +
                                R"()(?![A-Za-zА-Яа-яЄєІіЇїҐґ]))");
     return re;
 }

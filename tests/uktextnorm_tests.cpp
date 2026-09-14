@@ -286,10 +286,10 @@ int main(int argc, char** argv)
               "п'ять цілих і п'ять десятих міліграми на мілілітр");
     expect_eq("medical frequency", normalize_ukrainian("2 рази на день"), "два рази на день");
     expect_eq(
-        "medical temperature", normalize_ukrainian("37,5°C"), "тридцять сім цілих і п'ять десятих градуса цельсія");
+        "medical temperature", normalize_ukrainian("37,5°C"), "тридцять сім цілих і п'ять десятих градуса Цельсія");
     expect_eq("dot decimal medical temperature",
               normalize_ukrainian("37.5°C"),
-              "тридцять сім цілих і п'ять десятих градуса цельсія");
+              "тридцять сім цілих і п'ять десятих градуса Цельсія");
     expect_eq("blood pressure",
               normalize_ukrainian("120/80 мм рт. ст."),
               "сто двадцять на вісімдесят міліметрів ртутного стовпа");
@@ -309,7 +309,19 @@ int main(int argc, char** argv)
     range_options.range_style = uktextnorm::RangeStyle::FromTo;
     expect_eq("from-to unit range", normalize_ukrainian("5-7 кг", range_options), "від п'яти до семи кілограмів");
     expect_eq(
+        "from-to en dash unit range", normalize_ukrainian("5–7 кг", range_options), "від п'яти до семи кілограмів");
+    expect_eq(
         "from-to percent range", normalize_ukrainian("10-15%", range_options), "від десяти до п'ятнадцяти відсотків");
+    for (const auto input : {"5-7 °C", "5–7 °C", "5-7°C", "5–7°C", "5-7 градусів Цельсія", "5–7 градусів Цельсія"}) {
+        expect_eq("from-to temperature range " + std::string(input),
+                  normalize_ukrainian(input, range_options),
+                  "від п'яти до семи градусів Цельсія");
+    }
+    expect_eq("negative temperature", normalize_ukrainian("-5 °C", range_options), "мінус п'ять градусів Цельсія");
+    expect_eq("unicode minus temperature", normalize_ukrainian("−5 °C", range_options), "мінус п'ять градусів Цельсія");
+    expect_eq("explicit signed temperature range",
+              normalize_ukrainian("від -5 до +7 °C", range_options),
+              "від мінус п'яти до плюс семи градусів Цельсія");
     uktextnorm::NormalizeOptions phone_options;
     phone_options.phone_style = uktextnorm::PhoneStyle::DigitByDigit;
     expect_eq("phone digit by digit",
