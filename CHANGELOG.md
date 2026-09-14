@@ -101,5 +101,7 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Legal ranges with word labels, dotted subpoints, and paragraph symbols now honor `RangeStyle.FromTo`.
 - Python binding tests now resolve the configuration-specific extension directory correctly with multi-configuration
   generators such as Visual Studio on Windows.
+- The Windows CLI now reads command-line arguments as UTF-16 and converts them to UTF-8, preserving Ukrainian text,
+  degree symbols, and Unicode dashes passed directly on the command line.
 
 [0.4.0]: https://github.com/ThirdLetterC/normalize_uk-cpp/releases/tag/v0.4.0

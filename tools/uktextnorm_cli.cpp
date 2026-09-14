@@ -6,7 +6,18 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 
 #ifndef NORMALIZE_UK_CPP_VERSION
 #define NORMALIZE_UK_CPP_VERSION "unknown"
@@ -493,9 +504,7 @@ bool print_uncertain_tsv_line_by_line(std::string_view text,
     return failed;
 }
 
-} // namespace
-
-int main(int argc, char** argv)
+int run_cli(int argc, char** argv)
 {
     uktextnorm::NormalizeOptions options;
     bool uncertain = false;
@@ -663,3 +672,61 @@ int main(int argc, char** argv)
         return 1;
     }
 }
+
+#ifdef _WIN32
+
+std::string wide_to_utf8(std::wstring_view value)
+{
+    if (value.empty()) {
+        return {};
+    }
+    const auto input_size = static_cast<int>(value.size());
+    const auto output_size =
+        WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value.data(), input_size, nullptr, 0, nullptr, nullptr);
+    if (output_size == 0) {
+        throw std::runtime_error("failed to convert a command-line argument from UTF-16 to UTF-8");
+    }
+    std::string output(static_cast<std::size_t>(output_size), '\0');
+    if (WideCharToMultiByte(
+            CP_UTF8, WC_ERR_INVALID_CHARS, value.data(), input_size, output.data(), output_size, nullptr, nullptr) ==
+        0) {
+        throw std::runtime_error("failed to convert a command-line argument from UTF-16 to UTF-8");
+    }
+    return output;
+}
+
+#endif
+
+} // namespace
+
+#ifdef _WIN32
+
+int wmain(int argc, wchar_t** argv)
+{
+    try {
+        std::vector<std::string> utf8_arguments;
+        utf8_arguments.reserve(static_cast<std::size_t>(argc));
+        for (int i = 0; i < argc; ++i) {
+            utf8_arguments.push_back(wide_to_utf8(argv[i]));
+        }
+
+        std::vector<char*> arguments;
+        arguments.reserve(utf8_arguments.size());
+        for (auto& argument : utf8_arguments) {
+            arguments.push_back(argument.data());
+        }
+        return run_cli(argc, arguments.data());
+    } catch (const std::exception& ex) {
+        std::cerr << ex.what() << '\n';
+        return 1;
+    }
+}
+
+#else
+
+int main(int argc, char** argv)
+{
+    return run_cli(argc, argv);
+}
+
+#endif
