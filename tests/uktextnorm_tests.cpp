@@ -998,6 +998,60 @@ int main(int argc, char** argv)
     expect_eq("HTML code contents preserved",
               normalize_ukrainian("Формула <code>x = 5</code>, маса 2 кг.", audit_options),
               "Формула <code>x = 5</code>, маса два кілограми.");
+    expect_eq("mathematical comparisons are not HTML",
+              normalize_ukrainian("l/h = 2…10 між (l/h < 2) і (l/h > 10).", audit_options),
+              "л/г дорівнює від двох до десяти між (л/г менше два) і (л/г більше десять).");
+    expect_eq("stripped adjacent quotes keep word boundaries",
+              normalize_ukrainian("дисертацію«Методична система»на тему", audit_options),
+              "дисертацію Методична система на тему");
+    expect_eq("address abbreviation does not match inside word",
+              normalize_ukrainian("пресс. сторінка двісті.", audit_options),
+              "пресс. сторінка двісті.");
+    expect_eq("measurement abbreviation is not a city",
+              normalize_ukrainian(normalize_ukrainian("1 т. о. м. = 1 кг", audit_options), audit_options),
+              "одна тонна. о. м. дорівнює один кілограм");
+    expect_eq("acute apostrophe is canonicalized in an identifier",
+              normalize_ukrainian("ICREPQ´04", audit_options),
+              "ай сі ар і пі к'ю'нуль чотири");
+    expect_eq("high precision decimal is not a phone number",
+              normalize_ukrainian("0,000000001 км", audit_options),
+              "нуль кома нуль нуль нуль нуль нуль нуль нуль нуль один кілометра");
+    expect_eq("measurement after duration governor",
+              normalize_ukrainian("протягом 4 хвилин", audit_options),
+              "протягом чотирьох хвилин");
+    expect_eq("bare dot decimal",
+              normalize_ukrainian("Коефіцієнт 0.9996.", audit_options),
+              "Коефіцієнт нуль цілих і дев'ять тисяч дев'ятсот дев'яносто шість десятитисячних.");
+    expect_eq("named compact version",
+              normalize_ukrainian("версії 2.6 і v0.9", audit_options),
+              "версії два крапка шість і ві нуль крапка дев'ять");
+    expect_eq("single-letter standard",
+              normalize_ukrainian("Стандарт E.214.", audit_options),
+              "Стандарт і крапка двісті чотирнадцять.");
+    expect_eq("lettered construction standard",
+              normalize_ukrainian("ДБН В.2.5-23:2010", audit_options),
+              "де бе ен ве крапка два крапка п'ять дефіс двадцять три двокрапка дві тисячі десять");
+    expect_eq("numeric construction standard",
+              normalize_ukrainian("ГОСТ 16483.17–81", audit_options),
+              "ГОСТ шістнадцять тисяч чотириста вісімдесят три крапка сімнадцять дефіс вісімдесят один");
+    expect_eq("dotted standard with letter suffix",
+              normalize_ukrainian("Wi-Fi 6 (802.11ax)", audit_options),
+              "ві-фі шість (вісімсот два крапка одинадцять ей екс)");
+    expect_eq("classification code is not an invalid date",
+              normalize_ukrainian("за спеціальністю 13.00.02", audit_options),
+              "за спеціальністю тринадцять крапка нуль нуль крапка нуль два");
+    expect_eq("numeric date consumes explicit year word",
+              normalize_ukrainian("Подію завершили 25.06.1986 року.", audit_options),
+              "Подію завершили двадцять п'ятого червня тисяча дев'ятсот вісімдесят шостого року.");
+    expect_eq("explicit year span",
+              normalize_ukrainian("З 1986 по 1991 рр. тривала програма.", audit_options),
+              "З тисяча дев'ятсот вісімдесят шостого до тисяча дев'ятсот дев'яносто першого року тривала програма.");
+    expect_eq("coordinate direction is not repeated",
+              normalize_ukrainian("Точка лежить на 174°E довготи.", audit_options),
+              "Точка лежить на сто сімдесят чотири градуси східної довготи.");
+    expect_eq("governed coordinate bounds",
+              normalize_ukrainian("від 180° довготи до 174° W довготи", audit_options),
+              "від ста вісімдесяти градусів довготи до ста сімдесяти чотирьох градусів західної довготи");
     const auto normalized_doi = normalize_ukrainian("doi:10.22059/jitm.2024.99052", audit_options);
     expect_eq("DOI normalization",
               normalized_doi,

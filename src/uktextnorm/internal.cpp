@@ -448,6 +448,15 @@ std::string decimal_to_words(std::string_view int_part, std::string_view frac_pa
            std::string(it->second[singular_fraction ? 0 : 1]);
 }
 
+std::string decimal_to_words_or_digits(std::string_view int_part, std::string_view frac_part)
+{
+    if (auto words = decimal_to_words(int_part, frac_part); !words.empty()) {
+        return words;
+    }
+    return number_digits_or_words(int_part.empty() ? std::string_view("0") : int_part) + " кома " +
+           number_to_words_digit_by_digit(frac_part);
+}
+
 const std::unordered_map<std::string, std::string>& abbreviation_map()
 {
     static const std::unordered_map<std::string, std::string> map = [] {
@@ -566,7 +575,7 @@ const std::regex& date_spelled_re()
 const std::regex& case_prep_re()
 {
     static const std::regex re(
-        R"((^|[^А-Яа-яЄєІіЇїҐґ-])(Близько|близько|Після|після|Менше|менше|Більше|більше|Серед|серед|Перед|перед|Між|між|Над|над|Під|під|При|при|Без|без|Від|від|До|до|Із|із|З|з|Об|об|К|к|О|о)\s+(\d+)(?:\s*()" +
+        R"((^|[^А-Яа-яЄєІіЇїҐґ-])(Близько|близько|Після|після|Протягом|протягом|Менше|менше|Більше|більше|Серед|серед|Перед|перед|Між|між|Над|над|Під|під|При|при|Без|без|Від|від|До|до|Із|із|З|з|Об|об|К|к|О|о)\s+(\d+)(?:\s*()" +
         unit_alt() + R"()(\.?))?(?!\s*%)(?![\d.,:%–—-])(?![A-Za-zА-Яа-яЄєІіЇїҐґ]))");
     return re;
 }
@@ -582,7 +591,7 @@ const std::regex& counted_genitive_re()
 {
     static const std::regex re(
         "(^|[^А-Яа-яЄєІіЇїҐґ\\d])(Близько|близько|Більше|більше|Менше|менше|Серед|серед|До|до|Від|від|Без|"
-        "без|Після|після|Із|із)\\s+([1-9]\\d{0,5})\\s+(" +
+        "без|Після|після|Протягом|протягом|Із|із)\\s+([1-9]\\d{0,5})\\s+(" +
         counted_noun_alt() + R"()(?![А-Яа-яЄєІіЇїҐґ]))");
     return re;
 }
@@ -1157,8 +1166,7 @@ std::string read_measurement_quantity(std::string_view num, const Measurement& m
     const auto pos = num.find_first_of(".,");
     if (pos != std::string_view::npos) {
         const auto integer = num.substr(0, pos).empty() ? std::string_view("0") : num.substr(0, pos);
-        auto words = decimal_to_words(integer, num.substr(pos + 1));
-        return words.empty() ? sign + std::string(num) : sign + words + " " + std::string(meas.decimal);
+        return sign + decimal_to_words_or_digits(integer, num.substr(pos + 1)) + " " + std::string(meas.decimal);
     }
     const auto n = try_parse_ull(num);
     if (!n) {
@@ -1194,9 +1202,9 @@ std::string finance_amount_words(std::string amount, const FinanceUnit& unit)
     replace_all(amount, " ", "");
     const auto pos = amount.find_first_of(".,");
     if (pos != std::string::npos) {
-        auto words =
-            decimal_to_words(std::string_view(amount).substr(0, pos), std::string_view(amount).substr(pos + 1));
-        return words.empty() ? amount : words + " " + std::string(unit.decimal);
+        return decimal_to_words_or_digits(std::string_view(amount).substr(0, pos),
+                                          std::string_view(amount).substr(pos + 1)) +
+               " " + std::string(unit.decimal);
     }
     const auto n = parse_ull(amount);
     auto words = split_words(number_to_words(n));

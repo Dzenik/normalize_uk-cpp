@@ -103,5 +103,15 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   generators such as Visual Studio on Windows.
 - The Windows CLI now reads command-line arguments as UTF-16 and converts them to UTF-8, preserving Ukrainian text,
   degree symbols, and Unicode dashes passed directly on the command line.
+- Mathematical comparisons containing both `<` and `>` are no longer mistaken for HTML tags, and stripping adjacent
+  quotation marks no longer joins neighboring words.
+- Address abbreviations no longer match suffixes inside ordinary words or reinterpret generated measurement
+  abbreviations on a second normalization pass.
+- High-precision decimals are no longer parsed as phone numbers; unsupported decimal precision now falls back to a
+  digit-by-digit fractional reading without dropping the associated unit.
+- Dot decimals, compact and named versions, single-letter recommendations, classification codes, and common technical
+  standard designations now receive stable spoken readings.
+- Numeric dates consume an already written `року`/`р.` suffix, coordinate directions do not duplicate
+  `широти`/`довготи`, and governed coordinate bounds use the genitive case.
 
 [0.4.0]: https://github.com/ThirdLetterC/normalize_uk-cpp/releases/tag/v0.4.0

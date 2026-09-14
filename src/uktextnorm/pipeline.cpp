@@ -10,6 +10,23 @@ using namespace detail;
 
 namespace {
 
+bool preceded_by_classification_label(std::string_view prefix)
+{
+    auto lowered = lower_text(prefix.substr(prefix.size() > 96 ? prefix.size() - 96 : 0));
+    while (!lowered.empty() && std::isspace(static_cast<unsigned char>(lowered.back()))) {
+        lowered.pop_back();
+    }
+    return std::ranges::any_of(std::array<std::string_view, 8>{"спеціальністю",
+                                                               "спеціальностями",
+                                                               "спеціальностей",
+                                                               "спеціальності",
+                                                               "спеціальність",
+                                                               "напряму",
+                                                               "код",
+                                                               "шифр"},
+                               [&](std::string_view label) { return lowered.ends_with(label); });
+}
+
 std::string protect_opaque_markup(std::string text,
                                   std::vector<std::pair<std::string, std::string>>& protected_spans,
                                   NumericDateOrder numeric_date_order,
@@ -98,7 +115,7 @@ std::string protect_opaque_markup(std::string text,
         text = std::move(protected_ipa);
     }
     static const std::regex opaque(
-        R"((<!--[\s\S]*?-->|```[\s\S]*?```|~~~[\s\S]*?~~~|``(?:[^`\r\n]|`(?!`))*``|`[^`\r\n]*`|<(code|pre)\b[^>]*>[\s\S]*?</\2\s*>|<[^<>]+>|&(?:#[0-9]+|#[xX][0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]+);))",
+        R"((<!--[\s\S]*?-->|```[\s\S]*?```|~~~[\s\S]*?~~~|``(?:[^`\r\n]|`(?!`))*``|`[^`\r\n]*`|<(code|pre)\b[^>]*>[\s\S]*?</\2\s*>|</?[A-Za-z][A-Za-z0-9:_-]*(?:\s+[^<>]*?)?\s*/?>|<![A-Za-z][^<>]*>|&(?:#[0-9]+|#[xX][0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]+);))",
         std::regex::icase);
     text = regex_sub(text, opaque, [&](const std::smatch& m) { return protect(m.str()); });
     // std::regex cannot balance parentheses. Scan Markdown destinations so a
@@ -279,6 +296,10 @@ std::string protect_opaque_markup(std::string text,
     if (validate_dates) {
         static const std::regex local_date(R"((^|[^\d.])(\d{1,2})[./-](\d{1,2})[./-](\d{2}|\d{4})(?![\d.]))");
         text = regex_sub(text, local_date, [&](const std::smatch& m) {
+            if (preceded_by_classification_label(
+                    std::string_view(text).substr(0, static_cast<std::size_t>(m.position(2))))) {
+                return m.str();
+            }
             auto first = parse_int(m[2].str());
             auto second = parse_int(m[3].str());
             const auto short_year = parse_int(m[4].str());
@@ -618,13 +639,13 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
         }
     }
     if (maybe_digits()) {
-        if (text.contains(',')) {
-            text = normalize_decimals(std::move(text));
-        }
-        text = normalize_text_with_phone_numbers(std::move(text), options.phone_style);
         if (text.contains('.')) {
             text = normalize_versions(std::move(text));
         }
+        if (text.contains(',') || text.contains('.')) {
+            text = normalize_decimals(std::move(text));
+        }
+        text = normalize_text_with_phone_numbers(std::move(text), options.phone_style);
         if (text.contains('-') || text.contains("−")) {
             text = normalize_negatives(std::move(text));
         }

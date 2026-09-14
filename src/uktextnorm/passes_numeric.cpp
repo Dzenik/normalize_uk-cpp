@@ -528,7 +528,7 @@ std::string normalize_dates(
     });
     static const std::regex dmy_dash(R"(\b(\d{1,2})-(\d{1,2})-(\d{2}|\d{4})\b)");
     static const std::regex governed_numeric_date(
-        R"((^|[^А-Яа-яЄєІіЇїҐґ])(від|до|з|із|після|станом\s+на)\s+(\d{1,2})[./-](\d{1,2})[./-](\d{2}|\d{4})\b)",
+        R"((^|[^А-Яа-яЄєІіЇїҐґ])(від|до|з|із|після|станом\s+на)\s+(\d{1,2})[./-](\d{1,2})[./-](\d{2}|\d{4})\b(?:\s+(?:року|р\.))?)",
         std::regex::icase);
     text = regex_sub(text, governed_numeric_date, [&](const std::smatch& m) {
         const auto out = ordered_date_words(m[3].str(), m[4].str(), m[5].str(), "gen");
@@ -538,26 +538,26 @@ std::string normalize_dates(
         const auto out = ordered_date_words(m[1].str(), m[2].str(), m[3].str());
         return out ? *out : m.str();
     });
-    static const std::regex dmy_short_dot(R"(\b(\d{1,2})\.(\d{1,2})\.(\d{2})\b)");
+    static const std::regex dmy_short_dot(R"(\b(\d{1,2})\.(\d{1,2})\.(\d{2})\b(?:\s+(?:року|р\.))?)");
     text = regex_sub(text, dmy_short_dot, [&](const std::smatch& m) {
         const auto out = ordered_date_words(m[1].str(), m[2].str(), m[3].str());
         return out ? *out : m.str();
     });
-    static const std::regex dmy_short_slash(R"(\b(\d{1,2})/(\d{1,2})/(\d{2})\b)");
+    static const std::regex dmy_short_slash(R"(\b(\d{1,2})/(\d{1,2})/(\d{2})\b(?:\s+(?:року|р\.))?)");
     text = regex_sub(text, dmy_short_slash, [&](const std::smatch& m) {
         const auto out = ordered_date_words(m[1].str(), m[2].str(), m[3].str());
         return out ? *out : m.str();
     });
-    static const std::regex ymd_slash(R"(\b(\d{4})/(\d{1,2})/(\d{1,2})\b)");
+    static const std::regex ymd_slash(R"(\b(\d{4})/(\d{1,2})/(\d{1,2})\b(?:\s+(?:року|р\.))?)");
     text = regex_sub(text, ymd_slash, [&](const std::smatch& m) {
         const auto out = full_date_words(m[3].str(), m[2].str(), m[1].str());
         return out ? *out : m.str();
     });
-    text = ctre_sub<R"(\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b)">(text, [&](const auto& m) {
+    text = ctre_sub<R"(\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b(?:\s+(?:року|р\.))?)">(text, [&](const auto& m) {
         const auto out = ordered_date_words(cap<1>(m), cap<2>(m), cap<3>(m));
         return out ? *out : whole_string(m);
     });
-    text = ctre_sub<R"(\b(\d{1,2})/(\d{1,2})/(\d{4})\b)">(text, [&](const auto& m) {
+    text = ctre_sub<R"(\b(\d{1,2})/(\d{1,2})/(\d{4})\b(?:\s+(?:року|р\.))?)">(text, [&](const auto& m) {
         const auto out = ordered_date_words(cap<1>(m), cap<2>(m), cap<3>(m));
         return out ? *out : whole_string(m);
     });
@@ -683,6 +683,12 @@ std::string normalize_dates(
 
 std::string normalize_discourse_dates(std::string text)
 {
+    static const std::regex explicit_year_span(
+        R"((^|[^А-Яа-яЄєІіЇїҐґ])((?:З|з|Із|із|Від|від))\s+(\d{4})\s+(?:по|до)\s+(\d{4})\s*(?:рр?\.?|роки)?(?![\dА-Яа-яЄєІіЇїҐґ]))");
+    text = regex_sub(text, explicit_year_span, [](const std::smatch& m) {
+        return m[1].str() + m[2].str() + " " + number_to_ordinal_words(parse_ull(m[3].str()), "gen") + " до " +
+               number_to_ordinal_words(parse_ull(m[4].str()), "gen") + " року";
+    });
     static const std::regex season_year(
         R"((^|[^А-Яа-яЄєІіЇїҐґ])((?:весна|літо|осінь|зима))\s+(\d{3,4})(?![\dА-Яа-яЄєІіЇїҐґ]))", std::regex::icase);
     text = regex_sub(text, season_year, [](const std::smatch& m) {
@@ -1191,6 +1197,7 @@ std::string normalize_case_context(std::string text)
                                                                                 {"з", "instr"},
                                                                                 {"без", "gen"},
                                                                                 {"після", "gen"},
+                                                                                {"протягом", "gen"},
                                                                                 {"перед", "instr"},
                                                                                 {"між", "instr"},
                                                                                 {"над", "instr"},
@@ -1868,16 +1875,13 @@ std::string normalize_math(std::string text)
 
 std::string normalize_decimals(std::string text)
 {
-    return ctre_sub<R"(\b(\d+),(\d+)\b)">(text, [](const auto& m) {
+    return ctre_sub<R"(\b(\d+)[,.](\d+)\b)">(text, [](const auto& m) {
         const auto integer_part = cap_string<1>(m);
         const auto fractional_part = cap_string<2>(m);
         if (fractional_part.find_first_not_of('0') == std::string::npos) {
-            return number_digits_or_words(integer_part);
+            return decimal_to_words_or_digits(integer_part, fractional_part);
         }
-        auto words = decimal_to_words(integer_part, fractional_part);
-        return words.empty()
-                   ? number_digits_or_words(integer_part) + " кома " + number_to_words_digit_by_digit(fractional_part)
-                   : words;
+        return decimal_to_words_or_digits(integer_part, fractional_part);
     });
 }
 
@@ -1943,8 +1947,21 @@ std::string normalize_multipliers(std::string text, bool governed_only)
 }
 std::string normalize_versions(std::string text)
 {
+    static const std::regex named(
+        R"((^|[\s(\[{:,;])((?:(?:В|в)ерсі(?:я|ї|ю|єю)|(?:Р|р)еліз(?:у|ом)?|(?:В|в)ипуск(?:у|ом)?|(?:П|п)ункт(?:у|ом|і|а)?|(?:Р|р)озділ(?:у|ом|і|а)?)\s+)(\d+(?:\.\d+)+)\b)");
+    text =
+        regex_sub(text, named, [](const std::smatch& m) { return m[1].str() + m[2].str() + read_dotted(m[3].str()); });
     text = ctre_sub<R"(\b([A-Za-z][A-Za-z0-9_\-]*\s+)(\d+(?:\.\d+)+)\b)">(
         text, [](const auto& m) { return cap_string<1>(m) + read_dotted(cap<2>(m)); });
+    text = ctre_sub<R"(\b([vV])(\d+(?:\.\d+)+)\b)">(
+        text, [](const auto& m) { return spell_identifier_letters(cap<1>(m)) + " " + read_dotted(cap<2>(m)); });
+    text = ctre_sub<R"(\b([A-Za-z])\.(\d{1,6})\b)">(text, [](const auto& m) {
+        return spell_identifier_letters(cap<1>(m)) + " крапка " + number_digits_or_words(cap<2>(m));
+    });
+    text = ctre_sub<R"(\b(\d+)\.(\d+)([A-Za-z]{1,6})\b)">(text, [](const auto& m) {
+        return number_digits_or_words(cap<1>(m)) + " крапка " + number_digits_or_words(cap<2>(m)) + " " +
+               spell_identifier_letters(cap<3>(m));
+    });
     return ctre_sub<R"(\b\d+(?:\.\d+){2,}\b)">(text, [](const auto& m) { return read_dotted(cap<0>(m)); });
 }
 

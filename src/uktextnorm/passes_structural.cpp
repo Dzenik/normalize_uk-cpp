@@ -28,6 +28,11 @@ bool is_uk_letter(char32_t cp)
     return is_uk(cp) && !is_word_joiner(cp);
 }
 
+bool is_word_alphanumeric(char32_t cp)
+{
+    return is_uk_letter(cp) || is_latin(cp) || (cp >= U'0' && cp <= U'9');
+}
+
 bool parse_octet(std::string_view text, int& value)
 {
     if (text.empty() || text.size() > 3) {
@@ -234,7 +239,10 @@ std::string normalize_unicode(std::string text, QuoteStyle quote_style)
             ++idx;
             continue;
         }
-        if (is_apostrophe_variant(cp) && is_uk_letter(prev) && is_uk_letter(next)) {
+        const bool prime = cp == U'′';
+        if (is_apostrophe_variant(cp) &&
+            (prime ? (is_uk_letter(prev) || is_latin(prev)) && (is_uk_letter(next) || is_latin(next))
+                   : is_word_alphanumeric(prev) && is_word_alphanumeric(next))) {
             out.push_back('\'');
             continue;
         }
@@ -261,6 +269,10 @@ std::string normalize_unicode(std::string text, QuoteStyle quote_style)
                 append_utf8(out, is_opening_quote_cp(cp) || cp == U'“' ? U'«' : U'»');
                 break;
             case QuoteStyle::Strip:
+                if (is_word_alphanumeric(prev) && is_word_alphanumeric(next) && (out.empty() || out.back() != ' ')) {
+                    out.push_back(' ');
+                }
+                break;
             default:
                 break;
             }
@@ -429,17 +441,40 @@ std::string normalize_addresses(std::string text)
                                                                        {"обл", "область"},
                                                                        {"р-н", "район"}};
     static const std::regex re(
-        R"((^|[^0-9А-Яа-яЄєІіЇїҐґ])((?:смт|просп|пров|корп|буд|вул|наб|бул|оф|кв|обл|під|пов|р-н|пр|пл|м|с|б(?!\.п)))\.(?=\s*[A-Za-zА-Яа-яЄєІіЇїҐґ0-9]))",
+        R"(((?:смт|просп|пров|корп|буд|вул|наб|бул|оф|кв|обл|під|пов|р-н|пр|пл|м|с|б(?!\.п)))\.(?=\s*[A-Za-zА-Яа-яЄєІіЇїҐґ0-9]))",
         std::regex::icase);
-    return regex_sub(text, re, [](const std::smatch& m) {
-        const auto key = lower_text(m[2].str());
-        return m[1].str() + words.at(key);
+    return regex_sub(text, re, [&](const std::smatch& m) {
+        const auto key = lower_text(m[1].str());
+        const auto position = static_cast<std::size_t>(m.position());
+        if (position != 0) {
+            auto previous = position - 1;
+            while (previous > 0 && (static_cast<unsigned char>(text[previous]) & 0xC0U) == 0x80U) {
+                --previous;
+            }
+            std::size_t stop = previous + 1;
+            const auto cp = decode_one(text, previous, stop);
+            if (is_uk_letter(cp) || is_latin(cp) || (cp >= U'0' && cp <= U'9')) {
+                return m.str();
+            }
+        }
+        if (key == "м" || key == "с") {
+            auto next = position + static_cast<std::size_t>(m.length());
+            while (next < text.size() && std::isspace(static_cast<unsigned char>(text[next]))) {
+                ++next;
+            }
+            std::size_t stop = next + 1;
+            const auto cp = next < text.size() ? decode_one(text, next, stop) : U'\0';
+            if (!is_upper_uk(cp) && !(cp >= U'A' && cp <= U'Z') && !(cp >= U'0' && cp <= U'9')) {
+                return m.str();
+            }
+        }
+        return words.at(key);
     });
 }
 
 std::string normalize_number_groups(std::string text, bool parse_thousand_separators)
 {
-    static const std::regex leading_decimal(R"((^|[^\d.,])([+\-]?)([.,])(\d+)(?![\d.,]))");
+    static const std::regex leading_decimal(R"((^|[\s(\[{=:;])([+\-]?)([.,])(\d+)(?![\d.,]))");
     text = regex_sub(text, leading_decimal, [](const std::smatch& m) {
         return m[1].str() + m[2].str() + "0" + m[3].str() + m[4].str();
     });
@@ -538,7 +573,7 @@ std::string normalize_symbols(std::string text)
 std::string normalize_text_with_phone_numbers(std::string text, PhoneStyle style)
 {
     text = ctre_sub<
-        R"((^|[^\d])((?:\+?380|00380|0)\s*\(?\d{2}\)?[\-\s]?\d{3}[\-\s]?\d{2}[\-\s]?\d{2})(?:\s*(?:доб\.?|дод\.?|ext\.?|x)\s*(\d{1,6}))?(?!\d))">(
+        R"((^|[^\d.,])((?:\+?380|00380|0)\s*\(?\d{2}\)?[\-\s]?\d{3}[\-\s]?\d{2}[\-\s]?\d{2})(?:\s*(?:доб\.?|дод\.?|ext\.?|x)\s*(\d{1,6}))?(?!\d))">(
         text, [&](const auto& m) {
             auto out = cap_string<1>(m) + normalize_phone_number(cap<2>(m), style);
             if (!cap<3>(m).empty()) {
@@ -547,7 +582,7 @@ std::string normalize_text_with_phone_numbers(std::string text, PhoneStyle style
             return out;
         });
     static const std::regex international(
-        R"((^|[^\d])((?:\+|00)\d{1,3}(?:[\s().-]*\d{1,4}){2,})(?:\s*(?:доб\.?|дод\.?|ext\.?|x)\s*(\d{1,6}))?(?![\d]))",
+        R"((^|[^\d.,])((?:\+|00)\d{1,3}(?:[\s().-]*\d{1,4}){2,})(?:\s*(?:доб\.?|дод\.?|ext\.?|x)\s*(\d{1,6}))?(?!\d))",
         std::regex::icase);
     return regex_sub(text, international, [&](const std::smatch& m) {
         auto out = m[1].str() + normalize_phone_number(m[2].str(), style);
@@ -666,8 +701,8 @@ std::string normalize_coordinates(std::string text)
         }
         const auto decimal = token.find_first_of(".,");
         return decimal == std::string::npos ? number_to_words(parse_ull(token))
-                                            : decimal_to_words(std::string_view(token).substr(0, decimal),
-                                                               std::string_view(token).substr(decimal + 1));
+                                            : decimal_to_words_or_digits(std::string_view(token).substr(0, decimal),
+                                                                         std::string_view(token).substr(decimal + 1));
     };
     auto exceeds_coordinate_limit = [&](const std::string& token, int limit) {
         const auto magnitude = coordinate_magnitude(token);
@@ -722,6 +757,33 @@ std::string normalize_coordinates(std::string text)
                (is_negative_coordinate(latitude) ? " південна" : " північна") + ", довгота " +
                decimal_coordinate(longitude) + (is_negative_coordinate(longitude) ? " західна" : " східна");
     });
+    auto genitive_degrees = [](std::string_view digits) {
+        const auto value = parse_ull(digits);
+        return number_to_words_case(value, "gen") + " " + (value == 1 ? "градуса" : "градусів");
+    };
+    static const std::regex governed_marker(
+        R"((^|[\s(\[{:,;])((?:Від|від|До|до))\s+(\d{1,3})\s*°\s*([NSEW])(?:\s+(?:широти|довготи))?(?![A-Za-zА-Яа-яЄєІіЇїҐґ]))",
+        std::regex::icase);
+    text = regex_sub(text, governed_marker, [&](const std::smatch& m) {
+        const auto marker = lower_text(m[4].str());
+        const bool latitude = marker == "n" || marker == "s";
+        const auto degrees = parse_int(m[3].str());
+        if (degrees > (latitude ? 90 : 180)) {
+            return m.str();
+        }
+        return m[1].str() + m[2].str() + " " + genitive_degrees(m[3].str()) + " " + coordinate_hemisphere(m[4].str());
+    });
+    static const std::regex governed_axis(
+        R"((^|[\s(\[{:,;])((?:Від|від|До|до))\s+(\d{1,3})\s*°\s*(широти|довготи)(?![А-Яа-яЄєІіЇїҐґ]))",
+        std::regex::icase);
+    text = regex_sub(text, governed_axis, [&](const std::smatch& m) {
+        const auto latitude = lower_text(m[4].str()).starts_with("широт");
+        const auto degrees = parse_int(m[3].str());
+        if (degrees > (latitude ? 90 : 180)) {
+            return m.str();
+        }
+        return m[1].str() + m[2].str() + " " + genitive_degrees(m[3].str()) + " " + m[4].str();
+    });
     static const std::regex decimal_minutes(
         R"((^|[^\d])(\d{1,3})\s*°\s*(\d{1,2})[.,](\d+)\s*(?:′|')\s*((?:N|S|E|W)|(?:пн|пд|сх|зх)\.?\s*(?:ш|д)\.?))",
         std::regex::icase);
@@ -742,7 +804,7 @@ std::string normalize_coordinates(std::string text)
     // A bare integer followed by N/S/E/W is too ambiguous: N, S and W are
     // also common SI symbols. Require either a degree sign or a decimal value.
     static const std::regex decimal(
-        R"((^|[^\d.,])((?:[+\-])?)(\d{1,3})(?:(?:[.,](\d+)\s*(?:°)?)|(?:°\s*))\s*([NSEW])(?![A-Za-z]))",
+        R"((^|[^\d.,])((?:[+\-])?)(\d{1,3})(?:(?:[.,](\d+)\s*(?:°)?)|(?:°\s*))\s*([NSEW])(?:\s+(?:широт[а-яіїєґ]*|довгот[а-яіїєґ]*))?(?![A-Za-zА-Яа-яЄєІіЇїҐґ]))",
         std::regex::icase);
     text = regex_sub(text, decimal, [](const std::smatch& m) {
         const auto degrees = parse_int(m[3].str());
@@ -757,7 +819,7 @@ std::string normalize_coordinates(std::string text)
         std::string value;
         std::string unit;
         if (m[4].matched) {
-            value = decimal_to_words(m[3].str(), m[4].str());
+            value = decimal_to_words_or_digits(m[3].str(), m[4].str());
             unit = "градуса";
         } else {
             value = number_to_words(static_cast<unsigned long long>(degrees));
@@ -796,6 +858,29 @@ std::string normalize_coordinates(std::string text)
 }
 std::string normalize_identifiers(std::string text)
 {
+    const auto technical_standard = [](const std::smatch& m, std::size_t body_index) {
+        std::string out = m[1].str() + m[2].str();
+        if (body_index == 4) {
+            out += spell_identifier_letters(m[3].str()) + " крапка ";
+        }
+        out += read_dotted(m[body_index].str());
+        if (m[body_index + 1].matched) {
+            out += " дефіс " + number_digits_or_words(m[body_index + 1].str());
+        }
+        if (m[body_index + 2].matched) {
+            out += " двокрапка " + number_digits_or_words(m[body_index + 2].str());
+        }
+        return out;
+    };
+    static const std::string standard_letter =
+        R"((?:[A-Za-z]|А|Б|В|Г|Ґ|Д|Е|Є|Ж|З|И|І|Ї|Й|К|Л|М|Н|О|П|Р|С|Т|У|Ф|Х|Ц|Ч|Ш|Щ|Ю|Я))";
+    static const std::regex lettered_standard("(^|[\\s(\\[{:,;])((?:ДБН|ДСТУ|ГОСТ|ISO|IEC|IEEE)\\s+)(" +
+                                              standard_letter +
+                                              R"()\.(\d+(?:\.\d+)+)(?:(?:-|–|—)(\d+))?(?::(\d+))?\b)");
+    text = regex_sub(text, lettered_standard, [&](const std::smatch& m) { return technical_standard(m, 4); });
+    static const std::regex numeric_standard(
+        R"((^|[\s(\[{:,;])((?:ДСТУ|ГОСТ|ISO|IEC|IEEE)\s+)(\d+(?:\.\d+)+)(?:(?:-|–|—)(\d+))?(?::(\d+))?\b)");
+    text = regex_sub(text, numeric_standard, [&](const std::smatch& m) { return technical_standard(m, 3); });
     static const std::regex uuid(
         R"(\b([0-9A-Fa-f]{8})-([0-9A-Fa-f]{4})-([0-9A-Fa-f]{4})-([0-9A-Fa-f]{4})-([0-9A-Fa-f]{12})\b)");
     static const std::regex compact_uuid(R"(\bUUID\s*[:=]?\s*([0-9A-Fa-f]{32})\b)", std::regex::icase);

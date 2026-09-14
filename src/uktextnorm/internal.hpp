@@ -95,6 +95,7 @@ void feminine_last(std::vector<std::string>& words);
 void neuter_last(std::vector<std::string>& words);
 std::vector<std::string> under_thousand(unsigned n);
 std::string decimal_to_words(std::string_view int_part, std::string_view frac_part);
+std::string decimal_to_words_or_digits(std::string_view int_part, std::string_view frac_part);
 std::string number_words_for_gender(unsigned long long n, char gender);
 bool prefers_many_after_genitive_number(unsigned long long n);
 std::string inflect_ordinal(std::string stem, std::string_view form);
