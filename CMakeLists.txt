@@ -212,10 +212,14 @@ if(NORMALIZE_UK_CPP_BUILD_PYTHON)
     pybind11_add_module(normalize_uk_python MODULE bindings/python/normalize_uk.cpp)
     target_link_libraries(normalize_uk_python PRIVATE normalize_uk_cpp::normalize_uk_cpp)
     target_compile_features(normalize_uk_python PRIVATE cxx_std_23)
+    # Keep each multi-config build in an importable package directory. Without
+    # the explicit $<CONFIG> component, Visual Studio appends the configuration
+    # below normalize_uk and leaves the package root without __init__.py.
+    set(normalize_uk_python_package_dir "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/normalize_uk")
     set_target_properties(normalize_uk_python PROPERTIES
         OUTPUT_NAME _normalize_uk
-        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/normalize_uk
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/normalize_uk
+        LIBRARY_OUTPUT_DIRECTORY "${normalize_uk_python_package_dir}"
+        RUNTIME_OUTPUT_DIRECTORY "${normalize_uk_python_package_dir}"
         CXX_STANDARD 23
         CXX_STANDARD_REQUIRED ON
         CXX_EXTENSIONS OFF
@@ -236,7 +240,7 @@ if(NORMALIZE_UK_CPP_BUILD_PYTHON)
             COMMAND Python::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tests/python_binding_tests.py
         )
         set_tests_properties(normalize_uk_python_tests PROPERTIES
-            ENVIRONMENT "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}"
+            ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:normalize_uk_python>/.."
         )
     endif()
 

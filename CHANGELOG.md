@@ -93,5 +93,7 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   now resolve to the intended currency and sign.
 - Markdown destinations with balanced parentheses and double-backtick code spans remain opaque during normalization.
 - Legal ranges with word labels, dotted subpoints, and paragraph symbols now honor `RangeStyle.FromTo`.
+- Python binding tests now resolve the configuration-specific extension directory correctly with multi-configuration
+  generators such as Visual Studio on Windows.
 
 [0.4.0]: https://github.com/ThirdLetterC/normalize_uk-cpp/releases/tag/v0.4.0
