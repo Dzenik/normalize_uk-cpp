@@ -250,7 +250,7 @@ std::optional<RangeCurrency> range_currency(std::string_view token)
         return RangeCurrency{"гривень", 'f'};
     }
     for (const auto& entry : lexicon::kCurrencies) {
-        if (token == entry.code || (!entry.symbol.empty() && token == entry.symbol)) {
+        if (lower_text(token) == lower_text(entry.code) || (!entry.symbol.empty() && token == entry.symbol)) {
             return RangeCurrency{entry.main_many, entry.main_fem ? 'f' : 'm'};
         }
     }

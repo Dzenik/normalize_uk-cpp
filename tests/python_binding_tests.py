@@ -137,6 +137,28 @@ class NormalizeUkBindingTests(unittest.TestCase):
             "``код `5 кг` тут``",
         )
 
+    def test_iso_currencies_and_open_cryptocurrency_tickers(self) -> None:
+        cases = {
+            "5 AED": "п'ять дирхамів ОАЕ",
+            "1.234 BHD": "один бахрейнський динар двісті тридцять чотири філси",
+            "1.2345 CLF": (
+                "одна чилійська розрахункова одиниця "
+                "дві тисячі триста сорок п'ять десятитисячних частин"
+            ),
+            "1.5 JPY": "одна ціла і п'ять десятих єн",
+            "2 AVAX": "два аваланчі",
+            "BTC 2": "два біткоїни",
+            "1,000 BTC": "тисяча біткоїнів",
+            "1.000,25 ETH": "тисяча цілих і двадцять п'ять сотих ефіра",
+            "₿0.5": "нуль цілих і п'ять десятих біткоїна",
+            "0.25 NEWCOIN": "нуль цілих і двадцять п'ять сотих ен і дабл ю сі оу ай ен",
+            "NEWCOIN/USDT": "ен і дабл ю сі оу ай ен до тезерів",
+            "btc/eth": "біткоїнів до ефірів",
+        }
+        for source, expected in cases.items():
+            with self.subTest(source=source):
+                self.assertEqual(nuk.normalize_ukrainian(source, self.options), expected)
+
 
 if __name__ == "__main__":
     unittest.main()

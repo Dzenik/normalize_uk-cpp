@@ -2,6 +2,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -747,11 +748,12 @@ int main(int argc, char** argv)
                               "MD5 d41d8cd98f00b204",
                               uktextnorm::UncertaintyCategory::Identifier,
                               uktextnorm::UncertaintySeverity::Error);
-    expect_uncertain_metadata("uncertain currency metadata",
-                              uktextnorm::flag_uncertain("Сума 12 AED."),
-                              "12 AED",
-                              uktextnorm::UncertaintyCategory::Currency,
-                              uktextnorm::UncertaintySeverity::Warning);
+    expect_no_uncertain_category("supported ISO currency metadata",
+                                 uktextnorm::flag_uncertain("Сума 12 AED."),
+                                 uktextnorm::UncertaintyCategory::Currency);
+    expect_no_uncertain_category("generic finance ticker is not an unknown unit",
+                                 uktextnorm::flag_uncertain("Сума 5 XYZ."),
+                                 uktextnorm::UncertaintyCategory::Unit);
     expect_uncertain_metadata("ambiguous numeric date metadata",
                               uktextnorm::flag_uncertain("Дата 03/04/2026"),
                               "03/04/2026",
@@ -961,6 +963,48 @@ int main(int argc, char** argv)
               normalize_ukrainian("$1,234", audit_options),
               "тисяча двісті тридцять чотири долари");
     expect_eq("accounting currency", normalize_ukrainian("($5)", audit_options), "мінус п'ять доларів");
+    expect_eq("ISO currency", normalize_ukrainian("5 AED", audit_options), "п'ять дирхамів ОАЕ");
+    expect_eq("three-digit currency minor unit",
+              normalize_ukrainian("1.234 BHD", audit_options),
+              "один бахрейнський динар двісті тридцять чотири філси");
+    expect_eq("four-digit currency minor unit",
+              normalize_ukrainian("1.2345 CLF", audit_options),
+              "одна чилійська розрахункова одиниця дві тисячі триста сорок п'ять десятитисячних частин");
+    expect_eq(
+        "zero-digit currency decimal", normalize_ukrainian("1.5 JPY", audit_options), "одна ціла і п'ять десятих єн");
+    expect_eq("fiat pair", normalize_ukrainian("AED/USD", audit_options), "дирхамів ОАЕ до доларів США");
+    expect_eq("named cryptocurrency", normalize_ukrainian("2 AVAX", audit_options), "два аваланчі");
+    expect_eq("lowercase named cryptocurrency", normalize_ukrainian("2 avax", audit_options), "два аваланчі");
+    expect_eq("prefixed cryptocurrency", normalize_ukrainian("BTC 2", audit_options), "два біткоїни");
+    expect_eq("grouped cryptocurrency", normalize_ukrainian("1,000 BTC", audit_options), "тисяча біткоїнів");
+    expect_eq("localized grouped cryptocurrency",
+              normalize_ukrainian("1.000,25 ETH", audit_options),
+              "тисяча цілих і двадцять п'ять сотих ефіра");
+    expect_eq(
+        "bitcoin symbol prefix", normalize_ukrainian("₿0.5", audit_options), "нуль цілих і п'ять десятих біткоїна");
+    expect_eq(
+        "bitcoin symbol suffix", normalize_ukrainian("0,5 ₿", audit_options), "нуль цілих і п'ять десятих біткоїна");
+    expect_eq("generic cryptocurrency ticker",
+              normalize_ukrainian("0.25 NEWCOIN", audit_options),
+              "нуль цілих і двадцять п'ять сотих ен і дабл ю сі оу ай ен");
+    expect_eq("generic cryptocurrency pair",
+              normalize_ukrainian("NEWCOIN/USDT", audit_options),
+              "ен і дабл ю сі оу ай ен до тезерів");
+    expect_eq(
+        "lowercase known cryptocurrency pair", normalize_ukrainian("btc/eth", audit_options), "біткоїнів до ефірів");
+
+    std::istringstream iso_codes(
+        "AFN EUR ALL DZD USD AOA XCD XAD ARS AMD AWG AUD AZN BSD BHD BDT BBD BYN BZD XOF BMD INR BTN BOB BOV BAM "
+        "BWP NOK BRL BND BIF CVE KHR XAF CAD KYD CLP CLF CNY COP COU KMF CDF NZD CRC CUP XCG CZK DKK DJF DOP EGP "
+        "SVC ERN SZL ETB FKP FJD XPF GMD GEL GHS GIP GTQ GBP GNF GYD HTG HNL HKD HUF ISK IDR XDR IRR IQD ILS "
+        "JMD JPY JOD KZT KES KPW KRW KWD KGS LAK LBP LSL ZAR LRD LYD CHF MOP MKD MGA MWK MYR MVR MRU MUR XUA "
+        "MXN MXV MDL MNT MAD MZN MMK NAD NPR NIO NGN OMR PKR PAB PGK PYG PEN PHP PLN QAR RON RUB RWF SHP WST "
+        "STN SAR RSD SCR SLE SGD XSU SBD SOS SSP LKR SDG SRD SEK CHE CHW SYP TWD TJS TZS THB TOP TTD TND TRY "
+        "TMT UGX UAH AED USN UYU UYI UYW UZS VUV VES VED VND YER ZMW ZWG XBA XBB XBC XBD XTS XXX XAU XPD XPT "
+        "XAG");
+    for (std::string code; iso_codes >> code;) {
+        expect_not_contains("ISO 4217 coverage " + code, normalize_ukrainian("2 " + code, audit_options), code);
+    }
     expect_eq("invalid bracketed IPv6 port preserved",
               normalize_ukrainian("[2001:db8::1]:65536", audit_options),
               "[2001:db8::1]:65536");

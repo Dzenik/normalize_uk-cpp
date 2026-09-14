@@ -195,7 +195,7 @@ std::string normalize_overprecise_currency_decimals(std::string text);
 std::string normalize_symbol_currency(std::string text);
 std::string normalize_multipliers(std::string text);
 std::string normalize_currency(std::string text);
-std::string normalize_finance(std::string text);
+std::string normalize_finance(std::string text, bool include_generic = true);
 std::string normalize_text_with_phone_numbers(std::string text, PhoneStyle style);
 std::string normalize_ip_addresses(std::string text);
 std::string normalize_coordinates(std::string text);

@@ -351,6 +351,27 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
     const auto maybe_digits = [&] { return has_ascii_digit(text); };
     const auto maybe_roman = [&] { return has_roman_candidate(text); };
     const auto maybe_currency = [&] { return has_currency_candidate(text); };
+    const auto maybe_finance = [&] {
+        if (text.contains("₿")) {
+            return true;
+        }
+        const auto lowered = lower_text(text);
+        for (const auto& entry : lexicon::kFinanceUnits) {
+            const auto code = lower_text(entry.code);
+            std::size_t pos = 0;
+            while ((pos = lowered.find(code, pos)) != std::string::npos) {
+                const auto is_ascii_word = [](unsigned char ch) { return std::isalnum(ch) || ch == '_'; };
+                const bool left_boundary = pos == 0 || !is_ascii_word(lowered[pos - 1]);
+                const auto end = pos + code.size();
+                const bool right_boundary = end == lowered.size() || !is_ascii_word(lowered[end]);
+                if (left_boundary && right_boundary) {
+                    return true;
+                }
+                pos = end;
+            }
+        }
+        return false;
+    };
 
     text = normalize_unicode(std::move(text), options.quote_style);
     text = normalize_typography(std::move(text));
@@ -387,10 +408,13 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
         text = normalize_addresses(std::move(text));
     }
     text = normalize_abbreviations(text);
+    if (maybe_finance()) {
+        text = normalize_finance(std::move(text), false);
+    }
     if (maybe_digits()) {
-        static const std::regex grouped_currency(
-            R"((?:[$€£₴¥₽₩]|\b(?:UAH|USD|EUR|GBP|JPY|CNY|RUB|KRW|BRL|CAD|AUD)\b)\s*[1-9]\d{0,2}(?:(?:,\d{3})+\.\d{1,2}|(?:\.\d{3})+,\d{1,2}))",
-            std::regex::icase);
+        static const std::regex grouped_currency("(?:" + currency_token_alt() +
+                                                     R"()\s*[1-9]\d{0,2}(?:(?:,\d{3})+\.\d{1,4}|(?:\.\d{3})+,\d{1,4}))",
+                                                 std::regex::icase);
         if (std::regex_search(text, grouped_currency)) {
             text = normalize_currency(std::move(text));
         }
@@ -444,10 +468,11 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
     if (!maybe_digits() && contains_any(text, "½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅐⅛⅜⅝⅞⅑⅒")) {
         text = normalize_fractions(std::move(text));
     }
-    if (contains_any_token(text,
-                           {"BTC", "ETH", "USDT", "BNB", "SOL", "XRP", "ADA", "DOGE", "USD", "EUR", "GBP", "UAH"})) {
-        text = normalize_finance(std::move(text));
+    if (maybe_digits() && maybe_currency()) {
+        text = normalize_currency(std::move(text));
+        text = normalize_overprecise_currency_decimals(std::move(text));
     }
+    text = normalize_finance(std::move(text));
     if (options.expand_known_acronyms) {
         text = normalize_known_acronyms(std::move(text));
     }
@@ -463,10 +488,6 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
         }
     }
     if (maybe_digits()) {
-        if (maybe_currency()) {
-            text = normalize_overprecise_currency_decimals(std::move(text));
-            text = normalize_currency(std::move(text));
-        }
         if (text.contains(',')) {
             text = normalize_decimals(std::move(text));
         }
@@ -949,18 +970,6 @@ std::vector<UncertainSpan> flag_uncertain(std::string_view text)
             UncertaintyCategory::Web,
             UncertaintySeverity::Warning);
     }
-    static const std::regex unsupported_currency(
-        R"((^|[^\dA-Za-zА-Яа-яЄєІіЇїҐґ])(\d+(?:[.,]\d+)?)\s*(AED|SAR|ILS|THB|IDR|MYR)(?![A-Za-zА-Яа-яЄєІіЇїҐґ]))",
-        std::regex::icase);
-    for (std::sregex_iterator it(input.begin(), input.end(), unsupported_currency), end; it != end; ++it) {
-        const auto s = static_cast<std::size_t>((*it).position(2));
-        const auto e = static_cast<std::size_t>((*it).position(0) + (*it).length(0));
-        add(s,
-            e,
-            "unsupported or ambiguous currency token",
-            UncertaintyCategory::Currency,
-            UncertaintySeverity::Warning);
-    }
     static const std::unordered_set<std::string> known_unit_words = [] {
         std::unordered_set<std::string> out = {"грн",
                                                "коп",
@@ -994,7 +1003,7 @@ std::vector<UncertainSpan> flag_uncertain(std::string_view text)
             const auto original_unit = cap_string<3>(m);
             const auto unit = lower_text(original_unit);
             if (measurements().contains(original_unit) || measurements().contains(unit) ||
-                known_unit_words.contains(unit) || counted_nouns().contains(unit)) {
+                known_unit_words.contains(unit) || counted_nouns().contains(unit) || is_ascii_acronym(original_unit)) {
                 return;
             }
             const auto s = cap_pos<2>(input, m);

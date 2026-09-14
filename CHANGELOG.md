@@ -26,7 +26,13 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Compound engineering and medical measurements for force, torque, viscosity, irradiance, molarity, dosage,
   particulate concentration, and electric-vehicle energy use, plus a composable fallback for products, quotients,
   powers, and compact or percentage tolerances.
-- Finance support for SOL, XRP, ADA, and DOGE, plus RUB, KRW, BRL, ZAR, NZD, MXN, SGD, and HKD currencies.
+- Complete active ISO 4217 List One coverage (178 currency, fund, metal, and reserved codes as published by SIX on
+  2026-01-01), including correct 0-, 2-, 3-, and 4-digit minor-unit handling and additional unambiguous symbols.
+- Named readings for more than 70 established fiat/crypto finance tickers, plus an open ticker fallback that spells any new
+  2–10 character uppercase alphanumeric cryptocurrency code in amount and market-pair contexts.
+- Bitcoin amounts written with the `₿` symbol, both before and after the amount.
+- Crypto amounts with prefix or suffix tickers, localized thousands separators, signs, decimals, and
+  case-insensitive known market pairs.
 - Structured-data normalization for IPv4 ports and CIDR prefixes, IPv6 CIDR and bracketed endpoints, MAC addresses,
   UUIDs, ISBNs, ISSNs, VINs, SWIFT/BIC codes, and non-Ukrainian IBANs.
 - Phone-number support for international `00` prefixes and extension markers such as `доб.`, `дод.`, `ext`, and `x`.

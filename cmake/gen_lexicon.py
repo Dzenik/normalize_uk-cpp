@@ -30,7 +30,7 @@ TABLES = {
     "currencies.tsv": ("kCurrencies", "CurrencyEntry",
                        ["code", "symbol", "word_re", "main_one", "main_few", "main_many",
                         "main_fem", "sub_one", "sub_few", "sub_many", "sub_fem",
-                        "trailing_symbol"],
+                        "trailing_symbol", "minor_digits"],
                        {"main_fem", "sub_fem", "trailing_symbol"}),
 }
 
@@ -75,6 +75,9 @@ def read_table(path: Path, columns, bools):
             elif col == "gender":
                 if value not in GENDERS:
                     fail(f"{path.name}:{lineno}: gender must be one of {sorted(GENDERS)}")
+            elif col == "minor_digits":
+                if value not in ("0", "2", "3", "4"):
+                    fail(f"{path.name}:{lineno}: minor_digits must be 0, 2, 3, or 4")
             elif not value and col not in ("word_re", "symbol"):
                 fail(f"{path.name}:{lineno}: column {col!r} is empty")
         rows.append(row)
@@ -86,6 +89,8 @@ def emit_field(col: str, value: str, bools) -> str:
         return "true" if value == "1" else "false"
     if col == "gender":
         return f"'{value}'"
+    if col == "minor_digits":
+        return value
     return f'"{cpp_escape(value)}"'
 
 
@@ -110,6 +115,8 @@ def main() -> None:
                 fields.append(f"    bool {col} = false;")
             elif col == "gender":
                 fields.append(f"    char {col} = 'm';")
+            elif col == "minor_digits":
+                fields.append(f"    unsigned {col} = 2;")
             else:
                 fields.append(f"    std::string_view {col};")
         parts.append(f"\nstruct {struct} {{\n" + "\n".join(fields) + "\n};\n")

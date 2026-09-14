@@ -176,14 +176,33 @@ bool has_roman_candidate(std::string_view text)
 
 bool has_currency_candidate(std::string_view text)
 {
-    if (contains_any(text, "$€£₴₽₩") || contains_any_token(text, {"zł", "¥", "元", "Kč", "₺", "₹", "R$"})) {
+    if (std::ranges::any_of(lexicon::kCurrencies, [&](const auto& entry) {
+            return !entry.symbol.empty() && text.find(entry.symbol) != std::string_view::npos;
+        })) {
         return true;
     }
     const auto lowered = lower_text(text);
-    return contains_any_token(lowered, {"грн", "uah", "usd",  "eur", "gbp", "pln",   "chf",  "jpy",  "cny",  "czk",
-                                        "cad", "aud", "sek",  "nok", "dkk", "try",   "inr",  "rub",  "krw",  "brl",
-                                        "zar", "nzd", "mxn",  "sgd", "hkd", "долар", "євро", "фунт", "злот", "франк",
-                                        "єн",  "юан", "крон", "лір", "руп", "рубл",  "вон",  "реал", "ранд"});
+    if (contains_any_token(lowered,
+                           {"грн",
+                            "долар",
+                            "євро",
+                            "фунт",
+                            "злот",
+                            "франк",
+                            "єн",
+                            "юан",
+                            "крон",
+                            "лір",
+                            "руп",
+                            "рубл",
+                            "вон",
+                            "реал",
+                            "ранд"})) {
+        return true;
+    }
+    return std::ranges::any_of(lexicon::kCurrencies, [&](const auto& entry) {
+        return lowered.find(lower_text(entry.code)) != std::string::npos;
+    });
 }
 
 bool has_symbol_candidate(std::string_view text)

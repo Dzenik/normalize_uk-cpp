@@ -162,7 +162,15 @@ int main()
                                                        "[5 кг](https://example.com/a_(b)?x=1)",
                                                        "5‐7 °C",
                                                        "$1,234.56",
-                                                       "3 N*m"};
+                                                       "3 N*m",
+                                                       "1.234 BHD",
+                                                       "2 AVAX",
+                                                       "BTC 2",
+                                                       "1,000 BTC",
+                                                       "1.000,25 ETH",
+                                                       "₿0.5",
+                                                       "0.25 NEWCOIN",
+                                                       "NEWCOIN/USDT"};
     for (const auto& text : idempotent_cases) {
         const auto once = uktextnorm::normalize_ukrainian(text, uktextnorm::NormalizePreset::TtsFriendly);
         const auto twice = uktextnorm::normalize_ukrainian(once, uktextnorm::NormalizePreset::TtsFriendly);
