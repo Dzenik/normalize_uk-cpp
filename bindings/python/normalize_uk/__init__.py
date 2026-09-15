@@ -185,11 +185,11 @@ def normalize_ukrainian(
 ) -> str:
     """Normalize text with either an options object or a preset."""
     selected = _selection(options, preset)
-    return (
-        _native_normalize_ukrainian(text)
-        if selected is None
-        else _native_normalize_ukrainian(text, selected)
-    )
+    if selected is None:
+        return _native_normalize_ukrainian(text)
+    if isinstance(selected, NormalizePreset):
+        return _native_normalize_ukrainian(text, selected)
+    return _native_normalize_ukrainian(text, selected)
 
 
 def flag_uncertain(
@@ -200,11 +200,11 @@ def flag_uncertain(
 ) -> list[UncertainSpan]:
     """Find uncertain spans; explicit options suppress resolved ambiguity warnings."""
     selected = _selection(options, preset)
-    return (
-        _native_flag_uncertain(text)
-        if selected is None
-        else _native_flag_uncertain(text, selected)
-    )
+    if selected is None:
+        return _native_flag_uncertain(text)
+    if isinstance(selected, NormalizePreset):
+        return _native_flag_uncertain(text, selected)
+    return _native_flag_uncertain(text, selected)
 
 
 def normalize_ukrainian_with_preset(

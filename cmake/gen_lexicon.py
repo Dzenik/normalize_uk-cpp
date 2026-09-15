@@ -7,31 +7,65 @@ The TSV files are UTF-8, tab-separated, with a header row; lines starting
 with '#' are comments. Row order is preserved. Malformed rows, wrong column
 counts, and duplicate keys fail the build.
 """
+
 import sys
 import unicodedata
 from pathlib import Path
 
 TABLES = {
     # file: (array name, struct name, columns, (bool column names))
-    "units.tsv": ("kUnits", "UnitEntry",
-                  ["key", "one", "few", "many", "decimal", "gender"], set()),
-    "counted_nouns.tsv": ("kCountedNouns", "CountedNounEntry",
-                          ["key", "one", "few", "many", "gender"], set()),
-    "acronyms.tsv": ("kAcronyms", "AcronymEntry",
-                     ["acronym", "expansion"], set()),
-    "abbreviations.tsv": ("kAbbreviations", "AbbreviationEntry",
-                          ["key", "expansion"], set()),
-    "brands.tsv": ("kBrands", "BrandEntry",
-                   ["latin", "cyrillic"], set()),
-    "english_words.tsv": ("kEnglishWords", "EnglishWordEntry",
-                          ["latin", "cyrillic"], set()),
-    "finance_units.tsv": ("kFinanceUnits", "FinanceUnitEntry",
-                          ["code", "one", "few", "many", "decimal", "feminine"], {"feminine"}),
-    "currencies.tsv": ("kCurrencies", "CurrencyEntry",
-                       ["code", "symbol", "word_re", "main_one", "main_few", "main_many",
-                        "main_fem", "sub_one", "sub_few", "sub_many", "sub_fem",
-                        "trailing_symbol", "minor_digits"],
-                       {"main_fem", "sub_fem", "trailing_symbol"}),
+    "units.tsv": (
+        "kUnits",
+        "UnitEntry",
+        ["key", "one", "few", "many", "decimal", "gender"],
+        set(),
+    ),
+    "counted_nouns.tsv": (
+        "kCountedNouns",
+        "CountedNounEntry",
+        ["key", "one", "few", "many", "gender"],
+        set(),
+    ),
+    "acronyms.tsv": ("kAcronyms", "AcronymEntry", ["acronym", "expansion"], set()),
+    "abbreviations.tsv": (
+        "kAbbreviations",
+        "AbbreviationEntry",
+        ["key", "expansion"],
+        set(),
+    ),
+    "brands.tsv": ("kBrands", "BrandEntry", ["latin", "cyrillic"], set()),
+    "english_words.tsv": (
+        "kEnglishWords",
+        "EnglishWordEntry",
+        ["latin", "cyrillic"],
+        set(),
+    ),
+    "finance_units.tsv": (
+        "kFinanceUnits",
+        "FinanceUnitEntry",
+        ["code", "one", "few", "many", "decimal", "feminine"],
+        {"feminine"},
+    ),
+    "currencies.tsv": (
+        "kCurrencies",
+        "CurrencyEntry",
+        [
+            "code",
+            "symbol",
+            "word_re",
+            "main_one",
+            "main_few",
+            "main_many",
+            "main_fem",
+            "sub_one",
+            "sub_few",
+            "sub_many",
+            "sub_fem",
+            "trailing_symbol",
+            "minor_digits",
+        ],
+        {"main_fem", "sub_fem", "trailing_symbol"},
+    ),
 }
 
 # Duplicate keys are checked on the first column of each table.
@@ -51,7 +85,9 @@ def read_table(path: Path, columns, bools):
     rows = []
     seen = set()
     lines = path.read_text(encoding="utf-8").splitlines()
-    data_lines = [(i + 1, ln) for i, ln in enumerate(lines) if ln and not ln.startswith("#")]
+    data_lines = [
+        (i + 1, ln) for i, ln in enumerate(lines) if ln and not ln.startswith("#")
+    ]
     if not data_lines:
         fail(f"{path.name}: empty table")
     header_no, header = data_lines[0]
@@ -60,8 +96,10 @@ def read_table(path: Path, columns, bools):
     for lineno, line in data_lines[1:]:
         fields = line.split("\t")
         if len(fields) != len(columns):
-            fail(f"{path.name}:{lineno}: expected {len(columns)} columns, got {len(fields)}")
-        row = dict(zip(columns, fields))
+            fail(
+                f"{path.name}:{lineno}: expected {len(columns)} columns, got {len(fields)}"
+            )
+        row = dict(zip(columns, fields, strict=True))
         key = fields[0]
         if key in seen:
             fail(f"{path.name}:{lineno}: duplicate key {key!r}")
@@ -74,7 +112,9 @@ def read_table(path: Path, columns, bools):
                     fail(f"{path.name}:{lineno}: column {col!r} must be 0 or 1")
             elif col == "gender":
                 if value not in GENDERS:
-                    fail(f"{path.name}:{lineno}: gender must be one of {sorted(GENDERS)}")
+                    fail(
+                        f"{path.name}:{lineno}: gender must be one of {sorted(GENDERS)}"
+                    )
             elif col == "minor_digits":
                 if value not in ("0", "2", "3", "4"):
                     fail(f"{path.name}:{lineno}: minor_digits must be 0, 2, 3, or 4")
@@ -120,7 +160,9 @@ def main() -> None:
             else:
                 fields.append(f"    std::string_view {col};")
         parts.append(f"\nstruct {struct} {{\n" + "\n".join(fields) + "\n};\n")
-        parts.append(f"\ninline constexpr std::array<{struct}, {len(rows)}> {array} = {{{{\n")
+        parts.append(
+            f"\ninline constexpr std::array<{struct}, {len(rows)}> {array} = {{{{\n"
+        )
         for row in rows:
             values = ", ".join(emit_field(col, row[col], bools) for col in columns)
             parts.append(f"    {{{values}}},\n")

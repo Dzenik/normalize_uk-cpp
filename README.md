@@ -113,6 +113,14 @@ cmake --build build-fuzz --target uktextnorm_fuzzer
 
 ## Formatting
 
+For Python development, install `uv` and `just`, then sync the dev environment. `just format` applies Ruff fixes and formatting; `just lint` checks Ruff formatting, lint rules, and Pyright types.
+
+```sh
+uv sync --group dev
+just format
+just lint
+```
+
 The project includes a `.clang-format` file and a CMake formatting target. Install `clang-format`, then run:
 
 ```sh

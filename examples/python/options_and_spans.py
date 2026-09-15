@@ -6,7 +6,9 @@ import normalize_uk as nuk
 
 def describe_spans(text: str, options: nuk.NormalizeOptions) -> None:
     for span in nuk.flag_uncertain(text, options=options):
-        print(f"{span.start}:{span.stop} {span.text!r} {span.category.name}/{span.severity.name}: {span.reason}")
+        print(
+            f"{span.start}:{span.stop} {span.text!r} {span.category.name}/{span.severity.name}: {span.reason}"
+        )
 
 
 def main() -> None:
@@ -18,7 +20,11 @@ def main() -> None:
 
     text = "15.06.2026, +380 67 123-45-67, 5-7 кг"
     print(nuk.normalize_ukrainian(text, options))
-    print(nuk.normalize_ukrainian("OpenAI + ФОП", preset=nuk.NormalizePreset.SearchIndexing))
+    print(
+        nuk.normalize_ukrainian(
+            "OpenAI + ФОП", preset=nuk.NormalizePreset.SearchIndexing
+        )
+    )
 
     tts_options = nuk.NormalizeOptions(preset=nuk.NormalizePreset.TtsFriendly)
     tts_options.symbol_style = nuk.SymbolStyle.Preserve

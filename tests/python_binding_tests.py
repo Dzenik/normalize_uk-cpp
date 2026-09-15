@@ -1,6 +1,7 @@
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
+from typing import Any, cast
 
 import normalize_uk as nuk
 
@@ -36,7 +37,9 @@ class NormalizeUkBindingTests(unittest.TestCase):
         }
         for source, expected in cases.items():
             with self.subTest(source=source):
-                self.assertEqual(nuk.normalize_ukrainian(source, self.options), expected)
+                self.assertEqual(
+                    nuk.normalize_ukrainian(source, self.options), expected
+                )
 
     def test_dates_times_and_scientific_notation(self) -> None:
         cases = {
@@ -51,7 +54,9 @@ class NormalizeUkBindingTests(unittest.TestCase):
         }
         for source, expected in cases.items():
             with self.subTest(source=source):
-                self.assertEqual(nuk.normalize_ukrainian(source, self.options), expected)
+                self.assertEqual(
+                    nuk.normalize_ukrainian(source, self.options), expected
+                )
 
     def test_units_finance_and_structured_data(self) -> None:
         cases = {
@@ -64,12 +69,16 @@ class NormalizeUkBindingTests(unittest.TestCase):
         }
         for source, expected in cases.items():
             with self.subTest(source=source):
-                self.assertEqual(nuk.normalize_ukrainian(source, self.options), expected)
+                self.assertEqual(
+                    nuk.normalize_ukrainian(source, self.options), expected
+                )
 
     def test_ambiguity_policies(self) -> None:
         options = nuk.NormalizeOptions()
         options.colon_style = nuk.ColonStyle.Ratio
-        self.assertEqual(nuk.normalize_ukrainian("10:30", options), "десять до тридцяти")
+        self.assertEqual(
+            nuk.normalize_ukrainian("10:30", options), "десять до тридцяти"
+        )
         options.numeric_date_order = nuk.NumericDateOrder.MonthDayYear
         self.assertEqual(
             nuk.normalize_ukrainian("03/04/2026", options),
@@ -87,7 +96,11 @@ class NormalizeUkBindingTests(unittest.TestCase):
         }
         for source, category in cases.items():
             with self.subTest(source=source):
-                self.assertTrue(any(span.category == category for span in nuk.flag_uncertain(source)))
+                self.assertTrue(
+                    any(
+                        span.category == category for span in nuk.flag_uncertain(source)
+                    )
+                )
 
     def test_public_helpers_and_tokenization(self) -> None:
         self.assertEqual(nuk.number_to_words(21), "двадцять один")
@@ -150,36 +163,56 @@ class NormalizeUkBindingTests(unittest.TestCase):
 
         self.assertEqual(
             nuk.normalize_ukrainian("5 кг", preset=nuk.NormalizePreset.TtsFriendly),
-            nuk.normalize_ukrainian_with_preset("5 кг", nuk.NormalizePreset.TtsFriendly),
+            nuk.normalize_ukrainian_with_preset(
+                "5 кг", nuk.NormalizePreset.TtsFriendly
+            ),
         )
         with self.assertRaises(ValueError):
-            nuk.normalize_ukrainian("5 кг", options=options, preset=nuk.NormalizePreset.Default)  # type: ignore[call-overload]
+            cast(Any, nuk.normalize_ukrainian)(
+                "5 кг", options=options, preset=nuk.NormalizePreset.Default
+            )
 
     def test_policy_aware_uncertainty(self) -> None:
         text = "10:30, $12, 03/04/2026, 99:30"
         default_reasons = {span.reason for span in nuk.flag_uncertain(text)}
         self.assertIn("ambiguous colon pair (clock time or ratio)", default_reasons)
-        self.assertIn("ambiguous currency symbol (currency depends on locale)", default_reasons)
-        self.assertIn("ambiguous numeric date order (day/month or month/day)", default_reasons)
+        self.assertIn(
+            "ambiguous currency symbol (currency depends on locale)", default_reasons
+        )
+        self.assertIn(
+            "ambiguous numeric date order (day/month or month/day)", default_reasons
+        )
 
         options = nuk.NormalizeOptions(
             colon_style=nuk.ColonStyle.Ratio,
             numeric_date_order=nuk.NumericDateOrder.DayMonthYear,
             currency_symbol_policy=nuk.CurrencySymbolPolicy.AssumeCommon,
         )
-        selected_reasons = {span.reason for span in nuk.flag_uncertain(text, options=options)}
+        selected_reasons = {
+            span.reason for span in nuk.flag_uncertain(text, options=options)
+        }
         self.assertNotIn("ambiguous colon pair (clock time or ratio)", selected_reasons)
-        self.assertNotIn("ambiguous currency symbol (currency depends on locale)", selected_reasons)
-        self.assertNotIn("ambiguous numeric date order (day/month or month/day)", selected_reasons)
+        self.assertNotIn(
+            "ambiguous currency symbol (currency depends on locale)", selected_reasons
+        )
+        self.assertNotIn(
+            "ambiguous numeric date order (day/month or month/day)", selected_reasons
+        )
         self.assertIn("invalid clock time", selected_reasons)
         with self.assertRaises(ValueError):
-            nuk.flag_uncertain(text, options=options, preset=nuk.NormalizePreset.Default)  # type: ignore[call-overload]
+            cast(Any, nuk.flag_uncertain)(
+                text, options=options, preset=nuk.NormalizePreset.Default
+            )
 
     def test_parallel_native_calls(self) -> None:
         source = "15.06.2026, +380 67 123-45-67, 5–7 кг. " * 10
         expected = nuk.normalize_ukrainian(source, self.options)
         with ThreadPoolExecutor(max_workers=4) as executor:
-            outputs = list(executor.map(lambda _: nuk.normalize_ukrainian(source, self.options), range(8)))
+            outputs = list(
+                executor.map(
+                    lambda _: nuk.normalize_ukrainian(source, self.options), range(8)
+                )
+            )
         self.assertEqual(outputs, [expected] * 8)
 
     def test_markup_is_preserved(self) -> None:
@@ -188,7 +221,9 @@ class NormalizeUkBindingTests(unittest.TestCase):
             "<speak>п'ять кілограмів</speak>",
         )
         self.assertEqual(
-            nuk.normalize_ukrainian("[5 кг](https://example.com?a=1&amp;b=2)", self.options),
+            nuk.normalize_ukrainian(
+                "[5 кг](https://example.com?a=1&amp;b=2)", self.options
+            ),
             "[п'ять кілограмів](https://example.com?a=1&amp;b=2)",
         )
 
@@ -206,7 +241,9 @@ class NormalizeUkBindingTests(unittest.TestCase):
         }
         for source, expected in cases.items():
             with self.subTest(source=source):
-                self.assertEqual(nuk.normalize_ukrainian(source, self.options), expected)
+                self.assertEqual(
+                    nuk.normalize_ukrainian(source, self.options), expected
+                )
 
         self.assertEqual(
             nuk.normalize_ukrainian("[5 кг](https://example.com/a_(b))", self.options),
@@ -237,7 +274,9 @@ class NormalizeUkBindingTests(unittest.TestCase):
         }
         for source, expected in cases.items():
             with self.subTest(source=source):
-                self.assertEqual(nuk.normalize_ukrainian(source, self.options), expected)
+                self.assertEqual(
+                    nuk.normalize_ukrainian(source, self.options), expected
+                )
 
 
 if __name__ == "__main__":

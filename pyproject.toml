@@ -30,3 +30,23 @@ cmake.args = [
     "-DNORMALIZE_UK_CPP_FETCH_PYBIND11=OFF",
 ]
 wheel.packages = []
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501"]
+
+[tool.pyright]
+include = ["bindings/python", "cmake/gen_lexicon.py", "examples/python", "tests/python_binding_tests.py"]
+extraPaths = ["bindings/python"]
+pythonVersion = "3.10"
+typeCheckingMode = "standard"
+reportMissingModuleSource = "none"
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.414",
+    "ruff>=0.16.7",
+]

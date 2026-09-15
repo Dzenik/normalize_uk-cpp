@@ -230,6 +230,7 @@ if(NORMALIZE_UK_CPP_BUILD_PYTHON)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             ${CMAKE_CURRENT_SOURCE_DIR}/bindings/python/normalize_uk/__init__.py
             ${CMAKE_CURRENT_SOURCE_DIR}/bindings/python/normalize_uk/__init__.pyi
+            ${CMAKE_CURRENT_SOURCE_DIR}/bindings/python/normalize_uk/_normalize_uk.pyi
             ${CMAKE_CURRENT_SOURCE_DIR}/bindings/python/normalize_uk/py.typed
             $<TARGET_FILE_DIR:normalize_uk_python>
         VERBATIM
@@ -251,6 +252,7 @@ if(NORMALIZE_UK_CPP_BUILD_PYTHON)
     install(FILES
         bindings/python/normalize_uk/__init__.py
         bindings/python/normalize_uk/__init__.pyi
+        bindings/python/normalize_uk/_normalize_uk.pyi
         bindings/python/normalize_uk/py.typed
         DESTINATION normalize_uk
     )
