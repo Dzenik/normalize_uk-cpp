@@ -81,13 +81,24 @@ endif()
 
 add_library(normalize_uk_cpp
     src/rozpodil/rozpodil.cpp
+    src/rozpodil/rozpodil_tokenize.cpp
     src/uktextnorm/generated/uktextnorm_lexicons.hpp
     src/uktextnorm/internal.cpp
+    src/uktextnorm/internal_readers.cpp
+    src/uktextnorm/internal_validation.cpp
     src/uktextnorm/numbers.cpp
+    src/uktextnorm/numeric_helpers.cpp
     src/uktextnorm/passes_lexical.cpp
+    src/uktextnorm/passes_lexical_abbreviations.cpp
+    src/uktextnorm/passes_lexical_alphanumeric.cpp
     src/uktextnorm/passes_numeric.cpp
+    src/uktextnorm/passes_numeric_ranges.cpp
+    src/uktextnorm/passes_numeric_context.cpp
+    src/uktextnorm/passes_numeric_units.cpp
     src/uktextnorm/passes_structural.cpp
+    src/uktextnorm/passes_structural_identifiers.cpp
     src/uktextnorm/pipeline.cpp
+    src/uktextnorm/uncertainty.cpp
     src/uktextnorm/vocabulary.cpp
 )
 add_library(normalize_uk_cpp::normalize_uk_cpp ALIAS normalize_uk_cpp)
