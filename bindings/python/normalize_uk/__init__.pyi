@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from typing import Literal, overload
 
 from ._normalize_uk import (
@@ -104,6 +105,21 @@ def normalize_ukrainian(
 def normalize_ukrainian_with_preset(
     text: str, preset: NormalizePreset = NormalizePreset.Default
 ) -> str: ...
+@overload
+def normalize_ukrainian_many(
+    texts: Iterable[str],
+    options: NormalizeOptions | None = None,
+    *,
+    preset: None = None,
+) -> list[str]: ...
+@overload
+def normalize_ukrainian_many(
+    texts: Iterable[str], options: NormalizePreset, *, preset: None = None
+) -> list[str]: ...
+@overload
+def normalize_ukrainian_many(
+    texts: Iterable[str], options: None = None, *, preset: NormalizePreset
+) -> list[str]: ...
 @overload
 def flag_uncertain(
     text: str, options: NormalizeOptions | None = None, *, preset: None = None

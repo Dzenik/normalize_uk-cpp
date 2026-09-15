@@ -5,9 +5,11 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <array>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace py = pybind11;
@@ -85,6 +87,37 @@ auto with_text(py::str value, Fn fn)
     return fn(text);
 }
 
+std::vector<std::string> normalize_many(py::iterable texts, const uktextnorm::NormalizeOptions& options)
+{
+    // Convert and retain every Python string before releasing the GIL. The views
+    // point into immutable UTF-8 storage owned by these Python objects.
+    std::vector<py::str> owners;
+    std::vector<std::string_view> views;
+    for (py::handle item : texts) {
+        if (!py::isinstance<py::str>(item)) {
+            throw py::type_error("texts must contain str values only");
+        }
+        owners.push_back(py::reinterpret_borrow<py::str>(item));
+        views.push_back(py::cast<std::string_view>(owners.back()));
+    }
+
+    std::vector<std::string> results;
+    results.reserve(views.size());
+    std::unordered_map<std::string_view, std::size_t> seen;
+    {
+        py::gil_scoped_release release;
+        for (std::string_view view : views) {
+            if (const auto found = seen.find(view); found != seen.end()) {
+                results.push_back(results[found->second]);
+            } else {
+                results.push_back(uktextnorm::normalize_ukrainian(view, options));
+                seen.emplace(view, results.size() - 1);
+            }
+        }
+    }
+    return results;
+}
+
 template <typename Enum>
 Enum option_enum(py::handle value, std::string_view name)
 {
@@ -157,6 +190,41 @@ void bind_enum_option(py::class_<uktextnorm::NormalizeOptions>& cls,
         [member, name](uktextnorm::NormalizeOptions& options, py::handle value) {
             options.*member = option_enum<Enum>(value, name);
         });
+}
+
+template <typename T>
+void bind_copy(py::class_<T>& cls)
+{
+    cls.def("__copy__", [](const T& self) { return T(self); });
+    cls.def("__deepcopy__", [](const T& self, py::dict) { return T(self); }, py::arg("memo"));
+}
+
+constexpr std::array<std::string_view, 16> option_names = {
+    "expand_known_acronyms", "spell_unknown_acronyms", "normalize_english_words", "transliterate_latin",
+    "repair_homoglyphs", "validate_dates", "parse_thousand_separators", "normalize_network_addresses",
+    "range_style", "phone_style", "symbol_style", "date_style", "colon_style", "numeric_date_order",
+    "currency_symbol_policy", "quote_style"};
+
+py::tuple options_state(const uktextnorm::NormalizeOptions& options)
+{
+    return py::make_tuple(options.expand_known_acronyms, options.spell_unknown_acronyms,
+                          options.normalize_english_words, options.transliterate_latin, options.repair_homoglyphs,
+                          options.validate_dates, options.parse_thousand_separators, options.normalize_network_addresses,
+                          options.range_style, options.phone_style, options.symbol_style, options.date_style,
+                          options.colon_style, options.numeric_date_order, options.currency_symbol_policy,
+                          options.quote_style);
+}
+
+uktextnorm::NormalizeOptions options_from_state(py::tuple state)
+{
+    if (state.size() != option_names.size()) {
+        throw py::value_error("invalid NormalizeOptions pickle state");
+    }
+    uktextnorm::NormalizeOptions options;
+    for (std::size_t index = 0; index < option_names.size(); ++index) {
+        set_option(options, option_names[index], state[index]);
+    }
+    return options;
 }
 
 } // namespace
@@ -243,7 +311,8 @@ PYBIND11_MODULE(_normalize_uk, m)
         .value("SearchIndexing", uktextnorm::NormalizePreset::SearchIndexing)
         .finalize();
 
-    py::class_<uktextnorm::UncertainSpan>(m, "UncertainSpan")
+    auto uncertain_span_class = py::class_<uktextnorm::UncertainSpan>(m, "UncertainSpan");
+    uncertain_span_class
         .def_readonly("start", &uktextnorm::UncertainSpan::start)
         .def_readonly("stop", &uktextnorm::UncertainSpan::stop)
         .def_readonly("text", &uktextnorm::UncertainSpan::text)
@@ -256,7 +325,21 @@ PYBIND11_MODULE(_normalize_uk, m)
             py::is_operator())
         .def("__repr__", [](const uktextnorm::UncertainSpan& span) {
             return span_repr("UncertainSpan", span.start, span.stop, span.text);
-        });
+        })
+        .def(py::pickle(
+            [](const uktextnorm::UncertainSpan& span) {
+                return py::make_tuple(span.start, span.stop, span.text, span.reason, span.category, span.severity);
+            },
+            [](py::tuple state) {
+                if (state.size() != 6) {
+                    throw py::value_error("invalid UncertainSpan pickle state");
+                }
+                return uktextnorm::UncertainSpan{state[0].cast<std::size_t>(), state[1].cast<std::size_t>(),
+                                                 state[2].cast<std::string>(), state[3].cast<std::string>(),
+                                                 state[4].cast<uktextnorm::UncertaintyCategory>(),
+                                                 state[5].cast<uktextnorm::UncertaintySeverity>()};
+            }));
+    bind_copy(uncertain_span_class);
 
     auto options_class = py::class_<uktextnorm::NormalizeOptions>(m, "NormalizeOptions");
     options_class.def(py::init([](uktextnorm::NormalizePreset preset, py::kwargs overrides) {
@@ -285,15 +368,30 @@ PYBIND11_MODULE(_normalize_uk, m)
         options_class, "parse_thousand_separators", &uktextnorm::NormalizeOptions::parse_thousand_separators);
     bind_bool_option(
         options_class, "normalize_network_addresses", &uktextnorm::NormalizeOptions::normalize_network_addresses);
+    options_class.def(py::pickle(
+        [](const uktextnorm::NormalizeOptions& options) { return options_state(options); },
+        [](py::tuple state) { return options_from_state(state); }));
+    bind_copy(options_class);
 
-    py::class_<Substring>(m, "Substring")
+    auto substring_class = py::class_<Substring>(m, "Substring");
+    substring_class
         .def_readonly("start", &Substring::start)
         .def_readonly("stop", &Substring::stop)
         .def_readonly("text", &Substring::text)
         .def(
             "__eq__", [](const Substring& left, const Substring& right) { return left == right; }, py::is_operator())
         .def("__repr__",
-             [](const Substring& span) { return span_repr("Substring", span.start, span.stop, span.text); });
+             [](const Substring& span) { return span_repr("Substring", span.start, span.stop, span.text); })
+        .def(py::pickle(
+            [](const Substring& span) { return py::make_tuple(span.start, span.stop, span.text); },
+            [](py::tuple state) {
+                if (state.size() != 3) {
+                    throw py::value_error("invalid Substring pickle state");
+                }
+                return Substring{state[0].cast<std::size_t>(), state[1].cast<std::size_t>(),
+                                 state[2].cast<std::string>()};
+            }));
+    bind_copy(substring_class);
 
     m.def("options_for_preset", &uktextnorm::options_for_preset, py::arg("preset"));
     m.def("number_to_words", &uktextnorm::number_to_words, py::arg("n"));
@@ -337,6 +435,19 @@ PYBIND11_MODULE(_normalize_uk, m)
         },
         py::arg("text"),
         py::arg("preset"));
+    m.def("normalize_ukrainian_many",
+          [](py::iterable texts) { return normalize_many(texts, uktextnorm::NormalizeOptions{}); }, py::arg("texts"));
+    m.def("normalize_ukrainian_many",
+          [](py::iterable texts, const uktextnorm::NormalizeOptions& options) {
+              const auto snapshot = options;
+              return normalize_many(texts, snapshot);
+          },
+          py::arg("texts"), py::arg("options"));
+    m.def("normalize_ukrainian_many",
+          [](py::iterable texts, uktextnorm::NormalizePreset preset) {
+              return normalize_many(texts, uktextnorm::options_for_preset(preset));
+          },
+          py::arg("texts"), py::arg("preset"));
     m.def(
         "normalize_ukrainian_with_preset",
         [](py::str text, uktextnorm::NormalizePreset preset) {

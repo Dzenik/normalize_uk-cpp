@@ -35,6 +35,7 @@ import normalize_uk as nuk
 print(nuk.number_to_words(123))
 print(nuk.normalize_ukrainian("01.05.2024"))
 print(nuk.normalize_ukrainian("01.05.2024", preset=nuk.NormalizePreset.TtsFriendly))
+print(nuk.normalize_ukrainian_many(["01.05.2024", "5 кг"]))
 print([sentence.text for sentence in nuk.split_sentences("П'ять зв'язків. Два.")])
 print([token.text for token in nuk.tokenize("П'ять зв'язків.")])
 ```
@@ -63,6 +64,11 @@ spans = nuk.flag_uncertain("10:30, $12", options=options)
 ```
 
 Pass either `options=` or `preset=` to `normalize_ukrainian` and `flag_uncertain`.
+`normalize_ukrainian_many()` accepts any iterable of Python strings and applies one
+options snapshot to the entire batch. It returns a list in input order and raises
+`TypeError` if an item is not a string. It accepts the same `options=` and `preset=`
+selection as `normalize_ukrainian`. Identical strings within one batch are
+normalized once and their result is reused.
 The older positional options/preset calls and `normalize_ukrainian_with_preset()` remain available.
 Without options, `flag_uncertain()` reports all ambiguity candidates. With explicit options
 or a preset, it omits warnings for ambiguous dates, colon pairs, and currency symbols
@@ -83,6 +89,9 @@ Cardinal cases are `gen`, `dat`, `instr`, and `prep`. Unknown forms raise `Value
 The legacy spellings `sentenize()`, `cyrilize()`, and `cyrrilize()` remain available
 but issue `DeprecationWarning`; use `split_sentences()` and
 `transliterate_to_cyrillic()` in new code.
+
+`NormalizeOptions`, `Substring`, and `UncertainSpan` support `copy.copy()`,
+`copy.deepcopy()`, and `pickle` serialization. Copies are independent value objects.
 
 ## Currency and cryptocurrency coverage
 
@@ -114,6 +123,10 @@ Build and run the benchmark explicitly:
 cmake --build build --target uktextnorm_benchmark
 ./build/uktextnorm_benchmark .
 ```
+
+For Python binding timings, install the package and run
+`python benchmarks/python_binding_benchmark.py`. It compares scalar and batched
+normalization, including unique inputs, and span-returning calls.
 
 With Clang and libFuzzer support, build the normalization harness with sanitizers:
 

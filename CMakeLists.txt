@@ -23,9 +23,14 @@ option(NORMALIZE_UK_CPP_BUILD_TOOLS "Build command-line tools" ON)
 option(NORMALIZE_UK_CPP_BUILD_TESTS "Build C++ tests" ${NORMALIZE_UK_CPP_DEFAULT_BUILD_TESTS})
 option(NORMALIZE_UK_CPP_BUILD_PYTHON "Build Python 3.10+ bindings" OFF)
 option(NORMALIZE_UK_CPP_ENABLE_RELEASE_IPO "Enable IPO for release Python builds when supported" ON)
+option(NORMALIZE_UK_CPP_REQUIRE_CLANG "Require a Clang-family C++ compiler" OFF)
 option(NORMALIZE_UK_CPP_BUILD_FUZZER "Build the libFuzzer normalization harness" OFF)
 option(NORMALIZE_UK_CPP_FETCH_CTRE "Fetch CTRE when it is not already available" ON)
 option(NORMALIZE_UK_CPP_FETCH_PYBIND11 "Fetch pybind11 when it is not already available" ON)
+
+if(NORMALIZE_UK_CPP_REQUIRE_CLANG AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(FATAL_ERROR "Clang is required, but CMake selected ${CMAKE_CXX_COMPILER_ID}")
+endif()
 
 find_package(ctre CONFIG QUIET)
 

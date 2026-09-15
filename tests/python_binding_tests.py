@@ -1,3 +1,5 @@
+import copy
+import pickle
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
@@ -257,6 +259,118 @@ class NormalizeUkBindingTests(unittest.TestCase):
                 )
             )
         self.assertEqual(outputs, [expected] * 8)
+
+    def test_batch_normalization(self) -> None:
+        texts = ["5–7 °C", "Привіт.", "🙂 10 кг", ""] * 20
+        expected = [nuk.normalize_ukrainian(text, self.options) for text in texts]
+        self.assertEqual(
+            nuk.normalize_ukrainian_many(iter(texts), self.options), expected
+        )
+        self.assertEqual(
+            nuk.normalize_ukrainian_many(texts, preset=nuk.NormalizePreset.TtsFriendly),
+            [
+                nuk.normalize_ukrainian(text, preset=nuk.NormalizePreset.TtsFriendly)
+                for text in texts
+            ],
+        )
+        self.assertEqual(nuk.normalize_ukrainian_many([]), [])
+        self.assertEqual(
+            nuk.normalize_ukrainian_many(texts),
+            [nuk.normalize_ukrainian(text) for text in texts],
+        )
+        with self.assertRaises(TypeError):
+            cast(Any, nuk.normalize_ukrainian_many)(["Привіт", b"world"])
+        with self.assertRaises(ValueError):
+            cast(Any, nuk.normalize_ukrainian_many)(
+                texts, options=self.options, preset=nuk.NormalizePreset.Default
+            )
+
+    def test_value_copy_and_pickle(self) -> None:
+        options = nuk.NormalizeOptions(
+            preset=nuk.NormalizePreset.TtsFriendly,
+            expand_known_acronyms=False,
+            spell_unknown_acronyms=False,
+            normalize_english_words=False,
+            transliterate_latin=False,
+            repair_homoglyphs=False,
+            range_style=nuk.RangeStyle.FromTo,
+            phone_style=nuk.PhoneStyle.DigitByDigit,
+            symbol_style=nuk.SymbolStyle.Preserve,
+            date_style=nuk.DateStyle.Spoken,
+            colon_style=nuk.ColonStyle.Ratio,
+            numeric_date_order=nuk.NumericDateOrder.MonthDayYear,
+            currency_symbol_policy=nuk.CurrencySymbolPolicy.PreserveAmbiguous,
+            quote_style=nuk.QuoteStyle.Guillemets,
+            validate_dates=False,
+            parse_thousand_separators=False,
+            normalize_network_addresses=False,
+        )
+        fields = (
+            "expand_known_acronyms",
+            "spell_unknown_acronyms",
+            "normalize_english_words",
+            "transliterate_latin",
+            "repair_homoglyphs",
+            "validate_dates",
+            "parse_thousand_separators",
+            "normalize_network_addresses",
+            "range_style",
+            "phone_style",
+            "symbol_style",
+            "date_style",
+            "colon_style",
+            "numeric_date_order",
+            "currency_symbol_policy",
+            "quote_style",
+        )
+        for clone in (
+            copy.copy(options),
+            copy.deepcopy(options),
+            pickle.loads(pickle.dumps(options)),
+        ):
+            self.assertIsNot(clone, options)
+            for field in fields:
+                self.assertEqual(getattr(clone, field), getattr(options, field))
+            clone.range_style = nuk.RangeStyle.Compact
+            self.assertEqual(options.range_style, nuk.RangeStyle.FromTo)
+
+        substring = nuk.tokenize("🙂 Привіт")[0]
+        uncertain = nuk.flag_uncertain("10:30")[0]
+        for value in (substring, uncertain):
+            for clone in (
+                copy.copy(value),
+                copy.deepcopy(value),
+                pickle.loads(pickle.dumps(value)),
+            ):
+                self.assertIsNot(clone, value)
+                self.assertEqual(clone, value)
+
+    def test_options_snapshot_during_concurrent_mutation(self) -> None:
+        source = "5–7 °C. " * 20
+        compact = nuk.NormalizeOptions(range_style=nuk.RangeStyle.Compact)
+        from_to = nuk.NormalizeOptions(range_style=nuk.RangeStyle.FromTo)
+        expected = {
+            nuk.normalize_ukrainian(source, compact),
+            nuk.normalize_ukrainian(source, from_to),
+        }
+        shared = nuk.NormalizeOptions(range_style=nuk.RangeStyle.Compact)
+
+        def mutate() -> None:
+            for index in range(100):
+                shared.range_style = (
+                    nuk.RangeStyle.FromTo if index % 2 else nuk.RangeStyle.Compact
+                )
+
+        def normalize() -> list[str]:
+            return [nuk.normalize_ukrainian(source, shared) for _ in range(20)]
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            writer = executor.submit(mutate)
+            reader = executor.submit(normalize)
+            writer.result()
+            outputs = reader.result()
+        self.assertTrue(outputs)
+        self.assertTrue(all(output in expected for output in outputs))
 
     def test_markup_is_preserved(self) -> None:
         self.assertEqual(

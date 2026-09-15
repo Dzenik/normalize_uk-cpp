@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import warnings as _warnings
+from collections.abc import Iterable
 
 from ._normalize_uk import (
     ColonStyle,
@@ -37,6 +38,9 @@ from ._normalize_uk import (
 )
 from ._normalize_uk import (
     normalize_ukrainian as _native_normalize_ukrainian,
+)
+from ._normalize_uk import (
+    normalize_ukrainian_many as _native_normalize_ukrainian_many,
 )
 from ._normalize_uk import (
     number_to_ordinal_words as _native_number_to_ordinal_words,
@@ -75,6 +79,7 @@ __all__ = (
     "flag_uncertain",
     "normalize_abbreviations",
     "normalize_ukrainian",
+    "normalize_ukrainian_many",
     "normalize_ukrainian_with_preset",
     "number_to_ordinal_words",
     "number_to_words",
@@ -190,6 +195,21 @@ def normalize_ukrainian(
     if isinstance(selected, NormalizePreset):
         return _native_normalize_ukrainian(text, selected)
     return _native_normalize_ukrainian(text, selected)
+
+
+def normalize_ukrainian_many(
+    texts: Iterable[str],
+    options: NormalizeOptions | NormalizePreset | None = None,
+    *,
+    preset: NormalizePreset | None = None,
+) -> list[str]:
+    """Normalize an iterable of strings using one options snapshot for the batch."""
+    selected = _selection(options, preset)
+    if selected is None:
+        return _native_normalize_ukrainian_many(texts)
+    if isinstance(selected, NormalizePreset):
+        return _native_normalize_ukrainian_many(texts, selected)
+    return _native_normalize_ukrainian_many(texts, selected)
 
 
 def flag_uncertain(

@@ -48,6 +48,7 @@ jobs:
           cmake -S . -B build
           -DCMAKE_BUILD_TYPE=Release
           -DCMAKE_CXX_COMPILER=clang++
+          -DNORMALIZE_UK_CPP_REQUIRE_CLANG=ON
           -DNORMALIZE_UK_CPP_ENABLE_RELEASE_IPO=OFF
           -DNORMALIZE_UK_CPP_BUILD_TESTS=ON
           -DNORMALIZE_UK_CPP_BUILD_PYTHON=ON
@@ -56,6 +57,7 @@ jobs:
         run: >-
           cmake -S . -B build
           -G "Visual Studio 17 2022" -A x64 -T ClangCL
+          -DNORMALIZE_UK_CPP_REQUIRE_CLANG=ON
           -DNORMALIZE_UK_CPP_ENABLE_RELEASE_IPO=OFF
           -DNORMALIZE_UK_CPP_BUILD_TESTS=ON
           -DNORMALIZE_UK_CPP_BUILD_PYTHON=ON
