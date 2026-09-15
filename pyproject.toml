@@ -4,12 +4,16 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "normalize-uk"
-version = "0.4.5"
+version = "0.4.6"
 description = "Python bindings for Ukrainian text normalization and tokenization utilities"
 requires-python = ">=3.10"
 readme = "README.md"
 license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["Ukrainian", "text normalization", "tokenization", "text-to-speech"]
 classifiers = [
+    "Intended Audience :: Developers",
+    "Natural Language :: Ukrainian",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -18,7 +22,14 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: 3.15",
     "Programming Language :: C++",
+    "Topic :: Text Processing :: Linguistic",
 ]
+
+[project.urls]
+Homepage = "https://github.com/ThirdLetterC/normalize_uk-cpp"
+Repository = "https://github.com/ThirdLetterC/normalize_uk-cpp"
+Issues = "https://github.com/ThirdLetterC/normalize_uk-cpp/issues"
+Changelog = "https://github.com/ThirdLetterC/normalize_uk-cpp/blob/main/CHANGELOG.md"
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"
