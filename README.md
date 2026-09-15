@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/ThirdLetterC/normalize_uk-cpp/actions/workflows/ci.yml/badge.svg)](https://github.com/ThirdLetterC/normalize_uk-cpp/actions/workflows/ci.yml)
 [![Release](https://github.com/ThirdLetterC/normalize_uk-cpp/actions/workflows/release.yml/badge.svg)](https://github.com/ThirdLetterC/normalize_uk-cpp/actions/workflows/release.yml)
+[![PyPI](https://img.shields.io/pypi/v/normalize-uk.svg)](https://pypi.org/project/normalize-uk/)
 
 C++23 Ukrainian text normalization and tokenization utilities with optional Python 3.10+ bindings.
 
@@ -20,10 +21,18 @@ cmake -S . -B build-python -DNORMALIZE_UK_CPP_BUILD_PYTHON=ON
 cmake --build build-python
 ```
 
-A regular CMake install includes the C++ library, headers, and CMake package.
+A regular CMake install includes the C++ library, headers, and an exported CMake target file.
 Python wheels contain only the Python package and compiled extension.
 
 ## Python
+
+Install the published package from PyPI:
+
+```sh
+python -m pip install normalize-uk
+```
+
+To build and install from this checkout instead:
 
 ```sh
 python -m pip install .
@@ -42,14 +51,9 @@ print([token.text for token in nuk.tokenize("П'ять зв'язків.")])
 
 More examples live in `examples/python/`.
 
-Tags matching the version in `pyproject.toml` (for example, `v0.4.2`) trigger
+Tags matching the version in `pyproject.toml` (for example, `v0.4.3`) trigger
 wheel builds for supported Python versions. The workflow uploads the wheels to
 GitHub Release Assets, then downloads those Assets and publishes them to PyPI.
-To enable PyPI Trusted Publishing, register `ThirdLetterC/normalize_uk-cpp` as
-a publisher for `normalize-uk` with workflow `release.yml` and environment
-`pypi`. For a new PyPI project, register a
-[pending publisher](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/)
-first. No PyPI API token is needed.
 
 `NormalizeOptions` accepts a preset and named overrides at construction time:
 
@@ -81,8 +85,9 @@ code points, matching Python slicing, rather than UTF-8 bytes.
 `number_to_words()`, `number_to_ordinal_words()`, and `number_to_words_case()` accept
 integers from 0 through `999999999999999999`. Values outside that range raise
 `ValueError`; non-integers raise `TypeError`. `number_to_words_digit_by_digit()` accepts
-a nonempty string of ASCII digits only and preserves leading zeroes. Its invalid input
-raises `ValueError`. Ordinal forms are `nom_m`, `nom_n`, `nom_f`, `nom_pl`, `gen`, `dat`,
+a nonempty string of ASCII digits only and preserves leading zeroes. Empty strings or
+strings containing other characters raise `ValueError`; non-strings raise `TypeError`.
+Ordinal forms are `nom_m`, `nom_n`, `nom_f`, `nom_pl`, `gen`, `dat`,
 `prep`, `loc`, `pl`, `loc_pl`, `acc_f`, `gen_f`, `ins`, `ins_f`, `ins_pl`, and `loc_f`.
 Cardinal cases are `gen`, `dat`, `instr`, and `prep`. Unknown forms raise `ValueError`.
 
@@ -95,11 +100,12 @@ but issue `DeprecationWarning`; use `split_sentences()` and
 
 ## Currency and cryptocurrency coverage
 
-Normalization covers all 178 active ISO 4217 List One codes, including their
-0-, 2-, 3-, or 4-digit minor-unit rules. More than 70 common cryptocurrency and
-finance tickers have natural Ukrainian readings. Other 2–10 character uppercase
-alphanumeric tickers are spelled out after amounts and when paired with a known
-asset, so newly introduced assets do not require an immediate library release.
+Normalization covers 178 ISO 4217 List One codes from the 2026-01-01 data
+snapshot, including their 0-, 2-, 3-, or 4-digit minor-unit rules. More than 70
+common cryptocurrency and finance tickers have natural Ukrainian readings. Other
+2–10 character uppercase alphanumeric tickers are spelled out after amounts and
+when paired with a known asset, so newly introduced assets do not require an
+immediate library release.
 Prefix and suffix
 amounts, localized thousands separators, signs, decimals, and the `₿` symbol
 are supported.

@@ -7,14 +7,20 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-09-15
+
 ### Changed
 
-- Python wheels now contain only the Python package and extension; C++ archives, headers, and CMake exports remain in the
-  standalone CMake installation. Release Python builds enable IPO for the C++ core when the toolchain supports it.
+- The README now documents installation from the published PyPI package and links
+  its version badge. It also clarifies the CMake install contents, Python digit
+  input errors, and the currency-data snapshot date.
 
 ## [0.4.2] - 2026-09-15
 
 ### Changed
+
+- Python wheels now contain only the Python package and extension; C++ archives, headers, and CMake exports remain in the
+  standalone CMake installation. Release Python builds enable IPO for the C++ core when the toolchain supports it.
 
 - Python text APIs now require `str` and reject UTF-8 `bytes`, so returned character offsets always index the input.
 - Python sentence and token span offsets now index Unicode characters in `str`, matching uncertainty spans and Python
@@ -201,6 +207,7 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Bare ranges before sentence punctuation, ranges following a punctuation dash, and English `P.`/`pp.` page ranges
   now honor `RangeStyle.FromTo`.
 
+[0.4.3]: https://github.com/ThirdLetterC/normalize_uk-cpp/releases/tag/v0.4.3
 [0.4.2]: https://github.com/ThirdLetterC/normalize_uk-cpp/releases/tag/v0.4.2
 [0.4.1]: https://github.com/ThirdLetterC/normalize_uk-cpp/releases/tag/v0.4.1
 [0.4.0]: https://github.com/ThirdLetterC/normalize_uk-cpp/releases/tag/v0.4.0
