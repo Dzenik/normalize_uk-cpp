@@ -98,6 +98,38 @@ but issue `DeprecationWarning`; use `split_sentences()` and
 `NormalizeOptions`, `Substring`, and `UncertainSpan` support `copy.copy()`,
 `copy.deepcopy()`, and `pickle` serialization. Copies are independent value objects.
 
+## Custom vocabulary
+
+Save user-supplied word readings as a UTF-8 TSV file with the same columns as
+`data/lexicons/brands.tsv` and `data/lexicons/english_words.tsv`:
+
+```text
+latin	cyrillic
+Acme	акме
+Google	гуголь
+```
+
+Load the file into an options value and pass it to the normalizer:
+
+```python
+words = nuk.load_vocabulary_tsv("my_words.tsv")
+options = nuk.NormalizeOptions(vocabulary=words)
+print(nuk.normalize_ukrainian("Google і Acme", options=options))  # гуголь і акме
+```
+
+The same file works in C++:
+
+```cpp
+uktextnorm::NormalizeOptions options;
+options.vocabulary = uktextnorm::load_vocabulary_tsv("my_words.tsv");
+auto text = uktextnorm::normalize_ukrainian("Google і Acme", options);
+```
+
+For the CLI, run `uktextnorm --vocabulary my_words.tsv "Google і Acme"`.
+Latin keys are single ASCII words, matched without regard to case. Uploaded
+entries override built-in brand and English-word readings only for calls using
+those options. The `normalize_english_words` switch also controls custom readings.
+
 ## Currency and cryptocurrency coverage
 
 Normalization covers 178 ISO 4217 List One codes from the 2026-01-01 data

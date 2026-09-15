@@ -462,12 +462,15 @@ std::string normalize_finance(std::string text, bool include_generic)
     normalize_amounts(generic_ticker, std::regex::ECMAScript, "(?!)");
     return text;
 }
-std::string normalize_english(std::string text)
+std::string normalize_english(std::string text, const std::unordered_map<std::string, std::string>& vocabulary)
 {
     static const std::regex word(R"(\b[A-Za-z][A-Za-z'’-]*\b)");
     static const std::regex acronym(R"(\b[A-Z]+\b)");
-    text = regex_sub(text, word, [](const std::smatch& m) {
+    text = regex_sub(text, word, [&](const std::smatch& m) {
         const auto low = lower_text(m.str());
+        if (const auto it = vocabulary.find(low); it != vocabulary.end()) {
+            return it->second;
+        }
         if (const auto it = english_words().find(low); it != english_words().end()) {
             return it->second;
         }
@@ -475,7 +478,7 @@ std::string normalize_english(std::string text)
     });
     return regex_sub(text, acronym, [&](const std::smatch& m) {
         const auto low = lower_text(m.str());
-        if (english_words().contains(low)) {
+        if (vocabulary.contains(low) || english_words().contains(low)) {
             return m.str();
         }
         std::vector<std::string> parts;

@@ -1,8 +1,10 @@
 import copy
 import pickle
+import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
+from pathlib import Path
 from typing import Any, cast
 
 import normalize_uk as nuk
@@ -284,6 +286,47 @@ class NormalizeUkBindingTests(unittest.TestCase):
             cast(Any, nuk.normalize_ukrainian_many)(
                 texts, options=self.options, preset=nuk.NormalizePreset.Default
             )
+
+    def test_custom_vocabulary(self) -> None:
+        path = Path(__file__).parent / "data" / "custom_vocabulary.tsv"
+        words = nuk.load_vocabulary_tsv(str(path))
+        self.assertEqual(words, {"google": "гуголь", "acme": "акме"})
+        options = nuk.NormalizeOptions(vocabulary=words)
+        self.assertEqual(
+            nuk.normalize_ukrainian("Google і Acme", options), "гуголь і акме"
+        )
+        self.assertEqual(nuk.normalize_ukrainian("Google"), "гугл")
+        disabled = nuk.NormalizeOptions(
+            vocabulary=words, normalize_english_words=False, transliterate_latin=False
+        )
+        self.assertEqual(
+            nuk.normalize_ukrainian("Google і Acme", disabled), "Google і Acme"
+        )
+        self.assertEqual(
+            nuk.normalize_ukrainian_many(["Acme", "Google"], options),
+            ["акме", "гуголь"],
+        )
+        self.assertFalse(
+            any(
+                span.category == nuk.UncertaintyCategory.ForeignWord
+                for span in nuk.flag_uncertain("Acme", options=options)
+            )
+        )
+        for clone in (copy.copy(options), pickle.loads(pickle.dumps(options))):
+            self.assertEqual(clone.vocabulary, words)
+            clone.vocabulary = {"acme": "інше"}
+            self.assertEqual(options.vocabulary, words)
+        with self.assertRaises(ValueError):
+            nuk.NormalizeOptions(vocabulary={"Acme": "акме", "acme": "інше"})
+        with self.assertRaises(TypeError):
+            cast(Any, nuk.NormalizeOptions)(vocabulary={"acme": 1})
+        with tempfile.TemporaryDirectory() as directory:
+            invalid_path = Path(directory) / "duplicates.tsv"
+            invalid_path.write_text(
+                "latin\tcyrillic\nAcme\tакме\nACME\tінше\n", encoding="utf-8"
+            )
+            with self.assertRaises(ValueError):
+                nuk.load_vocabulary_tsv(str(invalid_path))
 
     def test_value_copy_and_pickle(self) -> None:
         options = nuk.NormalizeOptions(

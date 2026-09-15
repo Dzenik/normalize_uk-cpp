@@ -342,6 +342,11 @@ int main(int argc, char** argv)
     expect_eq("product exceptions",
               normalize_ukrainian("iPhone, YouTube, Docker і Kubernetes"),
               "айфон, ютуб, докер і кубернетіс");
+    uktextnorm::NormalizeOptions custom_words;
+    custom_words.vocabulary = {{"google", "гуголь"}, {"acme", "акме"}};
+    expect_eq("custom vocabulary overrides built-in word", normalize_ukrainian("Google і Acme", custom_words),
+              "гуголь і акме");
+    expect_eq("custom vocabulary stays local to options", normalize_ukrainian("Google"), "гугл");
     expect_eq(
         "url query",
         normalize_ukrainian("https://example.com/a?x=1&y=2"),

@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace uktextnorm {
@@ -113,9 +114,12 @@ struct NormalizeOptions {
     ColonStyle colon_style = ColonStyle::Contextual;
     NumericDateOrder numeric_date_order = NumericDateOrder::DayMonthYear;
     CurrencySymbolPolicy currency_symbol_policy = CurrencySymbolPolicy::AssumeCommon;
+    // Lowercase Latin word -> preferred Ukrainian reading. Entries override built-in words.
+    std::unordered_map<std::string, std::string> vocabulary;
 };
 
 [[nodiscard]] NormalizeOptions options_for_preset(NormalizePreset preset);
+[[nodiscard]] std::unordered_map<std::string, std::string> load_vocabulary_tsv(std::string_view path);
 
 [[nodiscard]] std::string number_to_words(unsigned long long n);
 [[nodiscard]] std::string number_to_words_digit_by_digit(std::string_view digits);

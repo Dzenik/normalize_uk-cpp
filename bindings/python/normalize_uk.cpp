@@ -5,7 +5,9 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <algorithm>
 #include <array>
+#include <cctype>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -77,6 +79,36 @@ bool option_bool(py::handle value, std::string_view name)
         throw py::type_error(std::string(name) + " must be a bool");
     }
     return py::cast<bool>(value);
+}
+
+std::unordered_map<std::string, std::string> option_vocabulary(py::handle value)
+{
+    if (!py::isinstance<py::dict>(value)) {
+        throw py::type_error("vocabulary must be a dict of Latin words to Ukrainian readings");
+    }
+    std::unordered_map<std::string, std::string> words;
+    for (auto item : py::reinterpret_borrow<py::dict>(value)) {
+        if (!py::isinstance<py::str>(item.first) || !py::isinstance<py::str>(item.second)) {
+            throw py::type_error("vocabulary keys and values must be strings");
+        }
+        auto key = py::cast<std::string>(item.first);
+        auto reading = py::cast<std::string>(item.second);
+        const auto letter = [](unsigned char ch) { return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z'); };
+        if (key.empty() || !letter(static_cast<unsigned char>(key.front())) ||
+            !letter(static_cast<unsigned char>(key.back())) ||
+            !std::all_of(key.begin(), key.end(), [&](unsigned char ch) { return letter(ch) || ch == '-' || ch == '\''; })) {
+            throw py::value_error("vocabulary keys must be single ASCII Latin words");
+        }
+        if (reading.empty()) {
+            throw py::value_error("vocabulary readings must be nonempty");
+        }
+        std::transform(key.begin(), key.end(), key.begin(),
+                       [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+        if (!words.emplace(std::move(key), std::move(reading)).second) {
+            throw py::value_error("vocabulary has duplicate words after case folding");
+        }
+    }
+    return words;
 }
 
 template <typename Fn>
@@ -163,6 +195,8 @@ void set_option(uktextnorm::NormalizeOptions& options, std::string_view name, py
         options.currency_symbol_policy = option_enum<uktextnorm::CurrencySymbolPolicy>(value, name);
     else if (name == "quote_style")
         options.quote_style = option_enum<uktextnorm::QuoteStyle>(value, name);
+    else if (name == "vocabulary")
+        options.vocabulary = option_vocabulary(value);
     else
         throw py::type_error("unknown normalization option: " + std::string(name));
 }
@@ -199,11 +233,11 @@ void bind_copy(py::class_<T>& cls)
     cls.def("__deepcopy__", [](const T& self, py::dict) { return T(self); }, py::arg("memo"));
 }
 
-constexpr std::array<std::string_view, 16> option_names = {
+constexpr std::array<std::string_view, 17> option_names = {
     "expand_known_acronyms", "spell_unknown_acronyms", "normalize_english_words", "transliterate_latin",
     "repair_homoglyphs", "validate_dates", "parse_thousand_separators", "normalize_network_addresses",
     "range_style", "phone_style", "symbol_style", "date_style", "colon_style", "numeric_date_order",
-    "currency_symbol_policy", "quote_style"};
+    "currency_symbol_policy", "quote_style", "vocabulary"};
 
 py::tuple options_state(const uktextnorm::NormalizeOptions& options)
 {
@@ -212,16 +246,16 @@ py::tuple options_state(const uktextnorm::NormalizeOptions& options)
                           options.validate_dates, options.parse_thousand_separators, options.normalize_network_addresses,
                           options.range_style, options.phone_style, options.symbol_style, options.date_style,
                           options.colon_style, options.numeric_date_order, options.currency_symbol_policy,
-                          options.quote_style);
+                          options.quote_style, options.vocabulary);
 }
 
 uktextnorm::NormalizeOptions options_from_state(py::tuple state)
 {
-    if (state.size() != option_names.size()) {
+    if (state.size() != option_names.size() && state.size() != option_names.size() - 1) {
         throw py::value_error("invalid NormalizeOptions pickle state");
     }
     uktextnorm::NormalizeOptions options;
-    for (std::size_t index = 0; index < option_names.size(); ++index) {
+    for (std::size_t index = 0; index < state.size(); ++index) {
         set_option(options, option_names[index], state[index]);
     }
     return options;
@@ -368,6 +402,9 @@ PYBIND11_MODULE(_normalize_uk, m)
         options_class, "parse_thousand_separators", &uktextnorm::NormalizeOptions::parse_thousand_separators);
     bind_bool_option(
         options_class, "normalize_network_addresses", &uktextnorm::NormalizeOptions::normalize_network_addresses);
+    options_class.def_property(
+        "vocabulary", [](const uktextnorm::NormalizeOptions& options) { return options.vocabulary; },
+        [](uktextnorm::NormalizeOptions& options, py::handle value) { options.vocabulary = option_vocabulary(value); });
     options_class.def(py::pickle(
         [](const uktextnorm::NormalizeOptions& options) { return options_state(options); },
         [](py::tuple state) { return options_from_state(state); }));
@@ -394,6 +431,7 @@ PYBIND11_MODULE(_normalize_uk, m)
     bind_copy(substring_class);
 
     m.def("options_for_preset", &uktextnorm::options_for_preset, py::arg("preset"));
+    m.def("load_vocabulary_tsv", &uktextnorm::load_vocabulary_tsv, py::arg("path"));
     m.def("number_to_words", &uktextnorm::number_to_words, py::arg("n"));
     m.def("number_to_words_digit_by_digit", &uktextnorm::number_to_words_digit_by_digit, py::arg("digits"));
     m.def("number_to_ordinal_words", &uktextnorm::number_to_ordinal_words, py::arg("n"), py::arg("form") = "nom_m");

@@ -7,6 +7,12 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- Callers can load a UTF-8 Latin-to-Ukrainian vocabulary TSV at runtime and
+  attach its readings to `NormalizeOptions` in C++, Python, or the CLI. Custom
+  entries override built-in brand and English-word readings per options value.
+
 ## [0.4.3] - 2026-09-15
 
 ### Changed

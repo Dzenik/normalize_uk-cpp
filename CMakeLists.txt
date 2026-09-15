@@ -88,6 +88,7 @@ add_library(normalize_uk_cpp
     src/uktextnorm/passes_numeric.cpp
     src/uktextnorm/passes_structural.cpp
     src/uktextnorm/pipeline.cpp
+    src/uktextnorm/vocabulary.cpp
 )
 add_library(normalize_uk_cpp::normalize_uk_cpp ALIAS normalize_uk_cpp)
 set_target_properties(normalize_uk_cpp PROPERTIES
@@ -187,6 +188,12 @@ if(NORMALIZE_UK_CPP_BUILD_TESTS)
         )
         set_tests_properties(uktextnorm_cli_date_policy PROPERTIES
             PASS_REGULAR_EXPRESSION "четверте березня"
+        )
+        add_test(NAME uktextnorm_cli_vocabulary
+            COMMAND uktextnorm --vocabulary ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/custom_vocabulary.tsv "Google і Acme"
+        )
+        set_tests_properties(uktextnorm_cli_vocabulary PROPERTIES
+            PASS_REGULAR_EXPRESSION "гуголь і акме"
         )
     endif()
 endif()

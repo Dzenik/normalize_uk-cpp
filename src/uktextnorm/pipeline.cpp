@@ -708,7 +708,7 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
     }
     if (options.normalize_english_words) {
         if (has_ascii_alpha(text)) {
-            text = normalize_english(std::move(text));
+            text = normalize_english(std::move(text), options.vocabulary);
         }
     }
     if (options.transliterate_latin) {
@@ -1033,7 +1033,8 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
         if (!has_latin || has_non_joiner_uk || !is_latin(decode_one(input, word.start, first_next))) {
             continue;
         }
-        if (is_ascii_acronym(token) || english_words().contains(lower_text(token))) {
+        if (is_ascii_acronym(token) || english_words().contains(lower_text(token)) ||
+            (options && options->vocabulary.contains(lower_text(token)))) {
             continue;
         }
         if (word.start > 0) {

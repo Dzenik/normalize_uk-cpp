@@ -43,6 +43,7 @@ void usage(std::ostream& out)
         << "  --no-known-acronyms    Preserve known Ukrainian acronyms.\n"
         << "  --no-acronym-spelling  Preserve unknown all-caps acronyms.\n"
         << "  --no-english           Preserve known English brand/product words.\n"
+        << "  --vocabulary <path>    Load Latin-to-Ukrainian word readings from a UTF-8 TSV file.\n"
         << "  --no-transliterate     Preserve remaining Latin-script words.\n"
         << "  --no-network-addresses Preserve IPv4/IPv6 addresses.\n"
         << "  --uncertain            Print uncertainty spans as TSV.\n"
@@ -515,6 +516,7 @@ int run_cli(int argc, char** argv)
     std::optional<uktextnorm::UncertaintySeverity> fail_on;
     std::optional<uktextnorm::UncertaintySeverity> min_severity;
     std::string file_path;
+    std::string vocabulary_path;
     std::string text;
 
     try {
@@ -568,6 +570,8 @@ int run_cli(int argc, char** argv)
                 options.spell_unknown_acronyms = false;
             } else if (arg == "--no-english") {
                 options.normalize_english_words = false;
+            } else if (arg == "--vocabulary") {
+                vocabulary_path = next(arg);
             } else if (arg == "--no-transliterate") {
                 options.transliterate_latin = false;
             } else if (arg == "--no-network-addresses") {
@@ -593,6 +597,10 @@ int run_cli(int argc, char** argv)
                 }
                 text += arg;
             }
+        }
+
+        if (!vocabulary_path.empty()) {
+            options.vocabulary = uktextnorm::load_vocabulary_tsv(vocabulary_path);
         }
 
         if (read_stdin) {

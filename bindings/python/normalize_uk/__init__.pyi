@@ -47,6 +47,9 @@ from ._normalize_uk import (
     expand_abbreviations as expand_abbreviations,
 )
 from ._normalize_uk import (
+    load_vocabulary_tsv as load_vocabulary_tsv,
+)
+from ._normalize_uk import (
     normalize_abbreviations as normalize_abbreviations,
 )
 from ._normalize_uk import (
