@@ -1375,7 +1375,8 @@ std::string normalize_ranges(std::string text, RangeStyle style)
             std::string unit = "відсотків";
             const auto context = governed_range(m, explicitly_from_to);
             if (context == GovernedRange::On || context == GovernedRange::In) {
-                auto high_token = std::string_view(m[high_index].str());
+                const auto high_token_storage = m[high_index].str();
+                auto high_token = std::string_view(high_token_storage);
                 take_spoken_sign(high_token);
                 if (const auto value = try_parse_ull(high_token)) {
                     unit = plural(*value, {"відсоток", "відсотки", "відсотків"});

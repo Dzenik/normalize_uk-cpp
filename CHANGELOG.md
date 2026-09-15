@@ -24,6 +24,7 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Fixed
 
 - Python span equality with unrelated types now returns `False` instead of raising a pybind11 argument error.
+- Governed percentage ranges such as `на 60-80%` no longer read a dangling string view; the sanitizer test now passes.
 
 ## [0.4.1] - 2026-09-15
 
