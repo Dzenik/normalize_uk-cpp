@@ -26,17 +26,21 @@ Python wheels contain only the Python package and compiled extension.
 
 ## Python
 
-Install the published package from PyPI:
+[Install `uv`](https://docs.astral.sh/uv/getting-started/installation/) first. To run
+the published package from PyPI without using this checkout's project environment:
 
 ```sh
-python -m pip install normalize-uk
+uv run --no-project --with normalize-uk python
 ```
 
-To build and install from this checkout instead:
+To build and work with this checkout, sync its locked dependencies and start Python:
 
 ```sh
-python -m pip install .
+uv sync
+uv run python
 ```
+
+In either Python session, try:
 
 ```python
 import normalize_uk as nuk
@@ -175,9 +179,9 @@ cmake --build build-bench-release --target uktextnorm_benchmark --parallel
 ./build-bench-release/uktextnorm_benchmark . --no-per-case --preset Default --target-bytes 262144
 ```
 
-For Python binding timings, install the package and run
-`python benchmarks/python_binding_benchmark.py`. It compares scalar and batched
-normalization, including unique inputs, and span-returning calls.
+For Python binding timings from this checkout, run
+`uv run python benchmarks/python_binding_benchmark.py`. It compares scalar and
+batched normalization, including unique inputs, and span-returning calls.
 
 Measured on 2026-09-15 with an Intel Core i9-9900K (Linux, GCC 13.3 Release
 build with `-O3`, Python 3.14.7). These are medians of three native runs or the
