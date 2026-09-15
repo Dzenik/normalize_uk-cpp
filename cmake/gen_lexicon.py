@@ -26,6 +26,12 @@ TABLES = {
         ["key", "one", "few", "many", "gender"],
         set(),
     ),
+    "counted_oblique.tsv": (
+        "kCountedOblique",
+        "CountedObliqueEntry",
+        ["key", "grammatical_case"],
+        set(),
+    ),
     "acronyms.tsv": ("kAcronyms", "AcronymEntry", ["acronym", "expansion"], set()),
     "abbreviations.tsv": (
         "kAbbreviations",
@@ -114,6 +120,11 @@ def read_table(path: Path, columns, bools):
                 if value not in GENDERS:
                     fail(
                         f"{path.name}:{lineno}: gender must be one of {sorted(GENDERS)}"
+                    )
+            elif col == "grammatical_case":
+                if value not in ("instr", "prep"):
+                    fail(
+                        f"{path.name}:{lineno}: grammatical_case must be instr or prep"
                     )
             elif col == "minor_digits":
                 if value not in ("0", "2", "3", "4"):

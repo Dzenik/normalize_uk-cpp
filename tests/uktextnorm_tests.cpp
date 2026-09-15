@@ -194,12 +194,25 @@ int main(int argc, char** argv)
     expect_eq("new counted nouns",
               normalize_ukrainian("2 книги і 21 сторінка"),
               "дві книги і двадцять одна сторінка");
+    expect_eq("broader counted nouns",
+              normalize_ukrainian("2 програми і 5 повідомлень"),
+              "дві програми і п'ять повідомлень");
+    expect_eq("locative noun forms",
+              normalize_ukrainian("У 3 програмах, на 7 сторінках та з 5 документами"),
+              "У трьох програмах, на семи сторінках та з п'ятьма документами");
+    expect_eq("article count outside legal labels", normalize_ukrainian("2 статті"), "дві статті");
     expect_eq("mixed fraction before counted noun",
               normalize_ukrainian("2 3/4 книги"),
               "дві і три четвертих книги");
     expect_eq("expanded brand and technical readings",
               normalize_ukrainian("Adobe, Firefox, browser та plugin"),
               "адобі, фаєрфокс, браузер та плагін");
+    expect_eq("additional brand and technical readings",
+              normalize_ukrainian("Figma, Viber, Diia і compiler"),
+              "фігма, вайбер, дія і компайлер");
+    expect_eq("additional rate units",
+              normalize_ukrainian("3 KB/s і 5 µg/m³"),
+              "три кілобайти за секунду і п'ять мікрограмів на кубічний метр");
     expect_eq("expanded acronym readings",
               normalize_ukrainian("ШІ та ООН"),
               "Штучний інтелект та організація об'єднаних націй");
@@ -1135,8 +1148,7 @@ int main(int argc, char** argv)
               "мінус дві цілих і п'ять десятих метра за секунду в квадраті");
     expect_eq("signed percent", normalize_ukrainian("-5%", audit_options), "мінус п'ять відсотків");
     expect_eq("latin SI product", normalize_ukrainian("3 N*m", audit_options), "три ньютони помножити на метр");
-    expect_eq(
-        "latin SI quotient", normalize_ukrainian("3 W/m²", audit_options), "три вати поділити на квадратний метр");
+    expect_eq("latin radiative flux unit", normalize_ukrainian("3 W/m²", audit_options), "три вати на квадратний метр");
     expect_eq("ISO week duration", normalize_ukrainian("P2W", audit_options), "два тижні");
     expect_eq(
         "fractional ISO duration", normalize_ukrainian("PT1.5H", audit_options), "одна ціла і п'ять десятих години");

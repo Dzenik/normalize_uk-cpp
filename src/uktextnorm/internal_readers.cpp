@@ -20,15 +20,13 @@ const std::unordered_map<std::string, CountedNoun>& counted_nouns()
 
 const std::unordered_map<std::string, std::string_view>& counted_oblique_cases()
 {
-    static const std::unordered_map<std::string, std::string_view> map = {
-        {"користувачами", "instr"}, {"користувачах", "prep"}, {"документами", "instr"}, {"документах", "prep"},
-        {"файлами", "instr"},       {"файлах", "prep"},       {"товарами", "instr"},    {"товарах", "prep"},
-        {"учасниками", "instr"},    {"учасниках", "prep"},    {"днями", "instr"},       {"днях", "prep"},
-        {"тижнями", "instr"},       {"тижнях", "prep"},       {"місяцями", "instr"},    {"місяцях", "prep"},
-        {"заявками", "instr"},      {"заявках", "prep"},      {"спробами", "instr"},    {"спробах", "prep"},
-        {"людьми", "instr"},        {"людях", "prep"},        {"особами", "instr"},     {"особах", "prep"},
-        {"дітьми", "instr"},        {"дітях", "prep"},        {"містами", "instr"},     {"містах", "prep"},
-        {"селами", "instr"},        {"селах", "prep"},        {"питаннями", "instr"},   {"питаннях", "prep"}};
+    static const std::unordered_map<std::string, std::string_view> map = [] {
+        std::unordered_map<std::string, std::string_view> out;
+        for (const auto& entry : lexicon::kCountedOblique) {
+            out.emplace(std::string(entry.key), entry.grammatical_case);
+        }
+        return out;
+    }();
     return map;
 }
 

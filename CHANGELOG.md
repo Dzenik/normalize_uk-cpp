@@ -12,11 +12,16 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Expanded built-in readings for common brands, English technical terms,
   Ukrainian acronyms and abbreviations, counted nouns, and Latin measurement
   symbols, including micro-unit variants.
+- Added many more noun families, product and technical readings, and compound
+  measurement aliases. Instrumental and locative noun forms now live in a
+  dedicated lexicon table, with new forms for both earlier and newly added nouns.
 
 ### Fixed
 
 - Counted noun readings no longer consume the denominator of a mixed fraction,
   and expanded abbreviations preserve an initial capital letter.
+- Article counts retain feminine agreement in ordinary prose without changing
+  legal labels such as `частина 2 стаття 19`.
 
 ## [0.4.4] - 2026-09-15
 

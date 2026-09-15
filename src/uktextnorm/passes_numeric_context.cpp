@@ -120,6 +120,13 @@ std::string normalize_counted_nouns(std::string text)
         const auto n = parse_ull(m[2].str());
         const auto key = lower_text(m[3].str());
         const auto& noun = counted_nouns().at(key);
+        if (noun.one == "стаття") {
+            const auto previous = preceding_word(m.prefix().str());
+            if (previous == "частина" || previous == "пункт" || previous == "розділ" || previous == "параграф" ||
+                previous == "глава") {
+                return m.str();
+            }
+        }
         return m[1].str() + number_words_for_gender(n, noun.gender) + " " + plural(n, {noun.one, noun.few, noun.many});
     });
 }
