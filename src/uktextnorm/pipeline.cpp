@@ -16,6 +16,11 @@ bool preceded_by_classification_label(std::string_view prefix)
     while (!lowered.empty() && std::isspace(static_cast<unsigned char>(lowered.back()))) {
         lowered.pop_back();
     }
+    // Dissertation catalogue entries commonly put the speciality code after
+    // "... технічних наук:" rather than after an explicit "спеціальність" label.
+    if (lowered.ends_with("наук:") && lowered.find("дис") != std::string::npos) {
+        return true;
+    }
     return std::ranges::any_of(std::array<std::string_view, 8>{"спеціальністю",
                                                                "спеціальностями",
                                                                "спеціальностей",
@@ -32,6 +37,11 @@ std::string protect_opaque_markup(std::string text,
                                   NumericDateOrder numeric_date_order,
                                   bool validate_dates)
 {
+    // Citation page markers in Wikipedia extracts look like invalid clock
+    // values (".:33–34:39–43").  Remove this metadata before invalid-time
+    // protection; otherwise only fragments of the marker are spoken.
+    static const std::regex wikipedia_page_citation(R"(\.(?::\d+(?:(?:-|–|—)\d+)?)+(?=\s|$))");
+    text = std::regex_replace(text, wikipedia_page_citation, ".");
     auto protect = [&](std::string value) {
         std::string key;
         append_utf8(key, U'\uE000');
@@ -166,8 +176,10 @@ std::string protect_opaque_markup(std::string text,
         text, markdown_reference, [&](const std::smatch& m) { return m[1].str() + m[2].str() + protect(m[3].str()); });
 
     static const std::regex malformed_scientific(R"((^|[^A-Za-z\d])([+\-]?\d+(?:[.,]\d+)?[eE][+\-]?)(?![+\-]?\d))");
-    text =
-        regex_sub(text, malformed_scientific, [&](const std::smatch& m) { return m[1].str() + protect(m[2].str()); });
+    text = regex_sub(text, malformed_scientific, [&](const std::smatch& m) {
+        static const std::regex ieee_revision(R"(802\.\d{1,2}[eE])");
+        return std::regex_match(m[2].str(), ieee_revision) ? m.str() : m[1].str() + protect(m[2].str());
+    });
     static const std::regex isbn_candidate(
         R"(\bISBN(?:-1[03])?\s*[:№#]?\s*((?:97[89][ -]?)?[0-9Xx](?:[ -]?[0-9Xx]){8,12})\b)", std::regex::icase);
     text = regex_sub(text, isbn_candidate, [&](const std::smatch& m) {
@@ -530,6 +542,20 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
     if (maybe_digits()) {
         text = normalize_page_ranges(std::move(text), options.range_style);
     }
+    if (options.normalize_english_words && has_ascii_digit(text) && has_ascii_alpha(text)) {
+        // Progressive-scan resolution suffixes must be read before homoglyph
+        // repair can turn the Latin p in "1080p-якістю" into Cyrillic р.
+        static const std::regex quality_resolution(
+            R"((^|[^A-Za-z0-9\xD0-\xD3\x80-\xBF])(480|576|720|1080|1440|2160|4320)[pP]-(якістю|якість))");
+        text = regex_sub(text, quality_resolution, [](const std::smatch& m) {
+            return m[1].str() + m[3].str() + " " + number_to_words(parse_ull(m[2].str())) + " пі";
+        });
+        static const std::regex progressive_resolution(
+            R"((^|[^A-Za-z0-9\xD0-\xD3\x80-\xBF])(480|576|720|1080|1440|2160|4320)[pP](?![A-Za-z0-9]))");
+        text = regex_sub(text, progressive_resolution, [](const std::smatch& m) {
+            return m[1].str() + number_to_words(parse_ull(m[2].str())) + " пі";
+        });
+    }
     if (options.repair_homoglyphs && has_ascii_alpha(text)) {
         text = normalize_homoglyphs(std::move(text));
     }
@@ -873,6 +899,10 @@ std::vector<UncertainSpan> flag_uncertain(std::string_view text)
     }
     static const std::regex malformed_scientific(R"((^|[^A-Za-z\d])([+\-]?\d+(?:[.,]\d+)?[eE][+\-]?)(?!\d))");
     for (std::sregex_iterator it(input.begin(), input.end(), malformed_scientific), end; it != end; ++it) {
+        static const std::regex ieee_revision(R"(802\.\d{1,2}[eE])");
+        if (std::regex_match((*it)[2].str(), ieee_revision)) {
+            continue;
+        }
         const auto s = static_cast<std::size_t>((*it).position(2));
         add(s,
             s + (*it)[2].length(),
@@ -1131,6 +1161,22 @@ std::vector<UncertainSpan> flag_uncertain(std::string_view text)
                                                "eth",
                                                "usdt",
                                                "bnb",
+                                               "у",
+                                               "в",
+                                               "і",
+                                               "й",
+                                               "та",
+                                               "до",
+                                               "від",
+                                               "на",
+                                               "за",
+                                               "з",
+                                               "із",
+                                               "зі",
+                                               "по",
+                                               "для",
+                                               "р",
+                                               "рр",
                                                "тис",
                                                "млн",
                                                "млрд",
@@ -1152,22 +1198,67 @@ std::vector<UncertainSpan> flag_uncertain(std::string_view text)
         }
         return out;
     }();
-    ctre_each<R"((^|[^\d.,:])(\d+(?:[.,]\d+)?)\s*([A-Za-zА-Яа-яЄєІіЇїҐґ]{1,6})(?![A-Za-zА-Яа-яЄєІіЇїҐґ]))">(
-        input, [&](const auto& m) {
-            const auto original_unit = cap_string<3>(m);
-            const auto unit = lower_text(original_unit);
-            if (measurements().contains(original_unit) || measurements().contains(unit) ||
-                known_unit_words.contains(unit) || counted_nouns().contains(unit) || is_ascii_acronym(original_unit)) {
-                return;
+    // CTRE's byte-oriented Cyrillic character class captures only the first
+    // byte of a UTF-8 letter here, making known units such as "т" look unknown.
+    // Match complete two-byte Cyrillic code points instead.
+    static const std::regex potential_unit(
+        R"((^|[^\d.,:A-Za-z\xD0-\xD3\x80-\xBF])(\d+(?:[.,]\d+)?)\s*((?:[A-Za-z]|[\xD0-\xD3][\x80-\xBF]){1,6})(?!(?:[A-Za-z]|[\xD0-\xD3][\x80-\xBF])))");
+    for (std::sregex_iterator it(input.begin(), input.end(), potential_unit), end; it != end; ++it) {
+        const auto& m = *it;
+        const auto original_unit = m[3].str();
+        const auto unit = lower_text(original_unit);
+        if (m[2].str().starts_with("802.") && m[2].length() <= 6) {
+            continue; // IEEE 802 revision suffix, not a measurement unit.
+        }
+        if (unit == "g" && m[2].length() == 1 && m[2].str().front() >= '2' && m[2].str().front() <= '6') {
+            continue; // 2G–6G mobile-network generation.
+        }
+        if (measurements().contains(original_unit) || measurements().contains(unit) ||
+            known_unit_words.contains(unit) || counted_nouns().contains(unit) || is_ascii_acronym(original_unit)) {
+            continue;
+        }
+        if (m[2].length() == 4 && m.position(2) + m.length(2) < m.position(3)) {
+            const auto value = parse_int(m[2].str());
+            std::size_t next = 1;
+            const auto first_letter = decode_one(original_unit, 0, next);
+            if (value >= 1000 && value <= 2099 && is_uk(first_letter) && !is_upper_uk(first_letter)) {
+                continue; // A probable year followed by ordinary lower-case prose.
             }
-            const auto s = cap_pos<2>(input, m);
-            const auto e = cap_pos<3>(input, m) + cap<3>(m).size();
-            add(s,
-                e,
-                "unknown unit or unsupported unit spelling",
-                UncertaintyCategory::Unit,
-                UncertaintySeverity::Warning);
-        });
+        }
+        const auto unit_cps = codepoints(original_unit);
+        if (unit_cps.size() > 3 && std::ranges::all_of(unit_cps, [](const auto& cp) {
+                return is_uk(cp.value) && !is_upper_uk(cp.value);
+            })) {
+            continue; // A full lower-case Ukrainian word is usually prose.
+        }
+        const auto s = static_cast<std::size_t>(m.position(2));
+        const auto e = static_cast<std::size_t>(m.position(3) + m.length(3));
+        if (e < input.size() && input[e] == '/') {
+            std::size_t end_of_denominator = e + 1;
+            int letters = 0;
+            while (end_of_denominator < input.size() && letters < 4) {
+                std::size_t next = end_of_denominator + 1;
+                const auto cp = decode_one(input, end_of_denominator, next);
+                if (!is_latin(cp) && !(is_uk(cp) && !is_word_joiner(cp))) {
+                    break;
+                }
+                end_of_denominator = next;
+                ++letters;
+            }
+            const auto full_unit = original_unit + input.substr(e, end_of_denominator - e);
+            if (measurements().contains(full_unit) || measurements().contains(lower_text(full_unit))) {
+                continue;
+            }
+            if (full_unit.ends_with("/c") && measurements().contains(full_unit.substr(0, full_unit.size() - 1) + "с")) {
+                continue; // Latin c is a common homoglyph in a /с rate.
+            }
+        }
+        add(s,
+            e,
+            "unknown unit or unsupported unit spelling",
+            UncertaintyCategory::Unit,
+            UncertaintySeverity::Warning);
+    }
     ctre_each<R"((^|[^\d.,])(\d{4})(?!\d|[.,]\d))">(input, [&](const auto& m) {
         const auto n = parse_int(cap<2>(m));
         if (n < 1000 || n > 2099) {

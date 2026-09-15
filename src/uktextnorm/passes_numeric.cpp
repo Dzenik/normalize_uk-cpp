@@ -709,12 +709,19 @@ std::string normalize_discourse_dates(std::string text)
 std::string normalize_ordinals(std::string text)
 {
     static const std::unordered_map<std::string, std::string_view> suffix_form = {{"й", "nom_m"},
+                                                                                  {"ший", "nom_m"},
                                                                                   {"го", "gen"},
                                                                                   {"му", "dat"},
                                                                                   {"м", "prep"},
                                                                                   {"а", "nom_f"},
+                                                                                  {"ша", "nom_f"},
+                                                                                  {"га", "nom_f"},
+                                                                                  {"тя", "nom_f"},
                                                                                   {"у", "acc_f"},
                                                                                   {"е", "nom_n"},
+                                                                                  {"ше", "nom_n"},
+                                                                                  {"ге", "nom_n"},
+                                                                                  {"тє", "nom_n"},
                                                                                   {"х", "pl"},
                                                                                   {"им", "ins"},
                                                                                   {"ім", "ins"},
@@ -727,7 +734,7 @@ std::string normalize_ordinals(std::string text)
     // for these UTF-8 lookahead/alternation expressions has high runtime stack
     // usage; on the default 1 MiB Windows executable stack even a short input
     // can terminate with STATUS_STACK_OVERFLOW.
-    static const std::regex ordinal_suffix(R"((\d+)(?:-|–|—)(ими|им|ім|ою|ій|го|му|й|м|а|у|е|х)(?![А-Яа-яЄєІіЇїҐґ]))");
+    static const std::regex ordinal_suffix(R"((\d+)(?:-|–|—)(ший|ими|им|ім|ою|ій|ше|ша|ге|га|тє|тя|го|му|й|м|а|у|е|х)(?![А-Яа-яЄєІіЇїҐґ]))");
     text = regex_sub(text, ordinal_suffix, [&](const std::smatch& m) {
         return number_to_ordinal_words(parse_ull(m[1].str()), suffix_form.at(m[2].str()));
     });
@@ -984,11 +991,16 @@ std::string normalize_ranges(std::string text, RangeStyle style)
     text = regex_sub(text, temperature_range, [&](const std::smatch& m) { return say_temperature(m, 2, 3, 4, false); });
 
     static const std::regex prepositional_year_range(
-        R"((^|[^А-Яа-яЄєІіЇїҐґ])(У|у|В|в)\s+(\d{3,4})\s*(?:-|−|–|—)\s*(\d{3,4})\s*(?:рр\.?|роки|роках)(?![а-яіїєґ]))");
-    text = regex_sub(text, prepositional_year_range, [](const std::smatch& m) {
-        return m[1].str() + "від " + number_to_ordinal_words(parse_ull(m[3].str()), "gen") + " до " +
+        R"((^|[^А-Яа-яЄєІіЇїҐґ])(У|у|В|в)\s+(\d{3,4})\s*(?:-|−|–|—)\s*(\d{3,4})\s*(?:рр\.?|роки|роках|року|років)(?![\dа-яіїєґ]))");
+    const auto say_prepositional_year_range = [](const std::smatch& m) {
+        return m[1].str() + m[2].str() + " період від " + number_to_ordinal_words(parse_ull(m[3].str()), "gen") + " до " +
                number_to_ordinal_words(parse_ull(m[4].str()), "gen") + " року";
-    });
+    };
+    text = regex_sub(text, prepositional_year_range, say_prepositional_year_range);
+    // Without an explicit year word, only treat a four-digit span as years.
+    static const std::regex bare_prepositional_year_range(
+        R"((^|[^А-Яа-яЄєІіЇїҐґ])(У|у|В|в)\s+(\d{4})\s*(?:-|−|–|—)\s*(\d{4})(?![\dа-яіїєґ]))");
+    text = regex_sub(text, bare_prepositional_year_range, say_prepositional_year_range);
     static const std::regex year_range(R"(\b(\d{3,4})\s*(?:-|−|–|—)\s*(\d{3,4})\s*(?:рр\.?|роки)(?![а-яіїєґ]))");
     text = regex_sub(text, year_range, [&](const std::smatch& m) {
         const auto low = parse_ull(m[1].str());
@@ -1351,7 +1363,7 @@ std::string normalize_ordinal_triggers(std::string text)
 std::string normalize_compounds(std::string text)
 {
     static const std::regex re(
-        R"((^|[^\d])(\d+)-(?!(?:ими|им|ім|ою|ій|го|му|й|м|а|у|е|х)(?:[^А-Яа-яЄєІіЇїҐґ]|$))([^0-9A-Za-z\s,.;:!?()]+))");
+        R"((^|[^\d])(\d+)-(?!(?:ший|ими|им|ім|ою|ій|ше|ша|ге|га|тє|тя|го|му|й|м|а|у|е|х)(?:[^А-Яа-яЄєІіЇїҐґ]|$))([^0-9A-Za-z\s,.;:!?()]+))");
     return regex_sub(text, re, [](const std::smatch& m) {
         std::string prefix;
         for (const auto& w : split_words(number_to_words(parse_ull(m[2].str())))) {

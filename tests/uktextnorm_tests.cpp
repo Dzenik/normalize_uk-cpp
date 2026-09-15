@@ -198,6 +198,21 @@ int main(int argc, char** argv)
     expect_eq("address",
               normalize_ukrainian("м. Київ, вул. Хрещатик, буд. 1, кв. 7"),
               "місто Київ, вулиця Хрещатик, будинок один, квартира сім");
+    expect_eq("city abbreviation after locative preposition",
+              normalize_ukrainian("Офіс у м. Києві."),
+              "Офіс у місті Києві.");
+    expect_eq("city abbreviation after genitive preposition",
+              normalize_ukrainian("Дуга простягається від м. Гаммерфест."),
+              "Дуга простягається від міста Гаммерфест.");
+    expect_eq("unambiguous genitive city abbreviation",
+              normalize_ukrainian("На 15 км проспекту м. Києва."),
+              "На п'ятнадцять кілометрів проспекту міста Києва.");
+    expect_eq("ordinal with full neuter suffix",
+              normalize_ukrainian("Тернопіль займає 1-ше місце."),
+              "Тернопіль займає перше місце.");
+    expect_eq("ordinal with full second and third suffixes",
+              normalize_ukrainian("2-ге і 3-тє місця."),
+              "друге і третє місця.");
     expect_eq(
         "year range", normalize_ukrainian("2020-2024 рр."), "дві тисячі двадцятий дві тисячі двадцять четвертий роки.");
     expect_eq("case year", normalize_ukrainian("у 2024 році"), "у дві тисячі двадцять четвертому році");
@@ -398,7 +413,11 @@ int main(int argc, char** argv)
         "from-to percent range", normalize_ukrainian("10-15%", range_options), "від десяти до п'ятнадцяти відсотків");
     expect_eq("prepositional year range",
               normalize_ukrainian("У 1998—2000 роках.", range_options),
-              "від тисяча дев'ятсот дев'яносто восьмого до двохтисячного року.");
+              "У період від тисяча дев'ятсот дев'яносто восьмого до двохтисячного року.");
+    expect_eq("prepositional bare year range",
+              normalize_ukrainian("У 1950—1951, за рекомендацією, було обране місце.", range_options),
+              "У період від тисяча дев'ятсот п'ятдесятого до тисяча дев'ятсот п'ятдесят першого року, за "
+              "рекомендацією, було обране місце.");
     expect_eq("range after explicit vid",
               normalize_ukrainian("Енергія менша від 1,5–2 еВ.", range_options),
               "Енергія менша від однієї цілої і п'яти десятих до двох електронвольтів.");
@@ -860,6 +879,27 @@ int main(int argc, char** argv)
                               "5 qq",
                               uktextnorm::UncertaintyCategory::Unit,
                               uktextnorm::UncertaintySeverity::Warning);
+    expect_no_uncertain_category("UTF-8 tonne abbreviation is a known unit",
+                                 uktextnorm::flag_uncertain("Енциклопедія у 3 т."),
+                                 uktextnorm::UncertaintyCategory::Unit);
+    expect_no_uncertain_category("a year followed by a preposition is not a unit",
+                                 uktextnorm::flag_uncertain("2016 у Wayback Machine"),
+                                 uktextnorm::UncertaintyCategory::Unit);
+    expect_no_uncertain_category("a compound data rate is a known unit",
+                                 uktextnorm::flag_uncertain("100 Мбіт/с"),
+                                 uktextnorm::UncertaintyCategory::Unit);
+    expect_no_uncertain_category("a mixed-script data rate is a known unit",
+                                 uktextnorm::flag_uncertain("10 Гбіт/c"),
+                                 uktextnorm::UncertaintyCategory::Unit);
+    expect_no_uncertain_category("a month after a date is ordinary prose",
+                                 uktextnorm::flag_uncertain("1 січня"),
+                                 uktextnorm::UncertaintyCategory::Unit);
+    expect_no_uncertain_category("a chemical formula is not a number followed by a unit",
+                                 uktextnorm::flag_uncertain("H2O"),
+                                 uktextnorm::UncertaintyCategory::Unit);
+    expect_no_uncertain_category("3G is a network generation, not an unknown unit",
+                                 uktextnorm::flag_uncertain("мережа 3G"),
+                                 uktextnorm::UncertaintyCategory::Unit);
     expect_uncertain_metadata("uncertain email metadata",
                               uktextnorm::flag_uncertain("Контакт test@"),
                               "test@",
@@ -1094,9 +1134,36 @@ int main(int argc, char** argv)
     expect_eq("dotted standard with letter suffix",
               normalize_ukrainian("Wi-Fi 6 (802.11ax)", audit_options),
               "ві-фі шість (вісімсот два крапка одинадцять ей екс)");
+    expect_eq("bare IEEE revisions are identifiers, not numeric ranges",
+              normalize_ukrainian("802.16-2005 (802.16e, 802.16m).", audit_options),
+              "вісімсот два крапка шістнадцять дефіс дві тисячі п'ять (вісімсот два крапка шістнадцять і, "
+              "вісімсот два крапка шістнадцять ем).");
+    expect_eq("bare IEEE revision before sentence period",
+              normalize_ukrainian("Стандарт 802.16m.", audit_options),
+              "Стандарт вісімсот два крапка шістнадцять ем.");
+    expect_eq("bare IEEE revision with en dash",
+              normalize_ukrainian("802.16–2005", audit_options),
+              "вісімсот два крапка шістнадцять дефіс дві тисячі п'ять");
+    expect_no_uncertain_category("IEEE revision suffix is not an unknown unit",
+                                 uktextnorm::flag_uncertain("802.16e"),
+                                 uktextnorm::UncertaintyCategory::Unit);
+    expect_no_uncertain_category("IEEE revision suffix is not malformed scientific notation",
+                                 uktextnorm::flag_uncertain("802.16e"),
+                                 uktextnorm::UncertaintyCategory::Scientific);
     expect_eq("classification code is not an invalid date",
               normalize_ukrainian("за спеціальністю 13.00.02", audit_options),
               "за спеціальністю тринадцять крапка нуль нуль крапка нуль два");
+    expect_eq("dissertation speciality code after sciences label",
+              normalize_ukrainian("Дисертація доктора технічних наук: 05.24.01 / університет.", audit_options),
+              "Дисертація доктора технічних наук: нуль п'ять крапка двадцять чотири крапка нуль один / "
+              "університет.");
+    expect_eq("Wikipedia page citation metadata is not spoken",
+              normalize_ukrainian("Результат узгоджено з експериментом.:33–34:39–43 Так само виміряли густину.",
+                                  audit_options),
+              "Результат узгоджено з експериментом. Так само виміряли густину.");
+    expect_eq("speed-of-light variable is not a village abbreviation",
+              normalize_ukrainian("значення швидкості світла у вакуумі с. Перетворення статсіменса", audit_options),
+              "значення швидкості світла у вакуумі с. Перетворення статсіменса");
     expect_eq("numeric date consumes explicit year word",
               normalize_ukrainian("Подію завершили 25.06.1986 року.", audit_options),
               "Подію завершили двадцять п'ятого червня тисяча дев'ятсот вісімдесят шостого року.");
@@ -1154,6 +1221,15 @@ int main(int argc, char** argv)
     expect_eq("compound measurement terminal punctuation",
               normalize_ukrainian("Швидкість становить 100 Мбіт/с.", audit_options),
               "Швидкість становить сто мегабітів за секунду.");
+    expect_eq("mixed-script data-rate denominator",
+              normalize_ukrainian("Швидкість до 10 Гбіт/c.", audit_options),
+              "Швидкість до десяти гігабітів за секунду.");
+    expect_eq("progressive video resolution after a quality label",
+              normalize_ukrainian("Передача з 1080p-якістю.", audit_options),
+              "Передача з якістю тисяча вісімдесят пі.");
+    expect_eq("bare progressive video resolution",
+              normalize_ukrainian("Відео 720p.", audit_options),
+              "Відео сімсот двадцять пі.");
     expect_eq("capitalized kilobit unit",
               normalize_ukrainian("Швидкість становить 144 Кбіт/с.", audit_options),
               "Швидкість становить сто сорок чотири кілобіти за секунду.");

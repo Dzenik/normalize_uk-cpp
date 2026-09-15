@@ -378,8 +378,14 @@ std::string normalize_typography(std::string text)
     static const std::regex space_before_punctuation(R"([ \t]+(\.(?=\d|[.,;:!?]|$)|[,;:!?]))");
     text = std::regex_replace(text, space_before_punctuation, "$1");
     static const std::regex spaced_unit_slash(
-        R"((км|м|см³|см3|кбіт|Кбіт|мбіт|Мбіт|гбіт|Гбіт)[ \t]*/[ \t]*(год|с(?:²|2)?))");
-    text = std::regex_replace(text, spaced_unit_slash, "$1/$2");
+        R"((км|м|см³|см3|кбіт|Кбіт|мбіт|Мбіт|гбіт|Гбіт)[ \t]*/[ \t]*(год|с(?:²|2)?|c(?:²|2)?)(?![A-Za-z]))");
+    text = regex_sub(text, spaced_unit_slash, [](const std::smatch& m) {
+        auto denominator = m[2].str();
+        if (denominator.starts_with('c')) {
+            denominator.replace(0, 1, "с"); // Latin c in a mixed-script /с unit.
+        }
+        return m[1].str() + "/" + denominator;
+    });
     static const std::regex spaced_ascii_slash(R"(([A-Za-z])[ \t]*/[ \t]*([A-Za-z]))");
     text = std::regex_replace(text, spaced_ascii_slash, "$1/$2");
     static const std::regex spaced_cyrillic_dimension(R"((\d)\s+(?:х|Х)\s+(\d))");
@@ -476,6 +482,38 @@ std::string normalize_addresses(std::string text)
             if (!is_upper_uk(cp) && !(cp >= U'A' && cp <= U'Z') && !(cp >= U'0' && cp <= U'9')) {
                 return m.str();
             }
+        }
+        if (key == "м") {
+            const auto preceding = lower_text(text.substr(0, position));
+            static const std::regex locative_preposition(R"((^|[\s(])(?:у|в)\s+$)");
+            if (std::regex_search(preceding, locative_preposition)) {
+                return std::string("місті");
+            }
+            static const std::regex genitive_preposition(R"((^|[\s(])(?:від|до|з|із|зі|для)\s+$)");
+            if (std::regex_search(preceding, genitive_preposition)) {
+                return std::string("міста");
+            }
+            // "м. Києва" is an unambiguous genitive form even when no
+            // governing preposition immediately precedes the abbreviation.
+            auto next = position + static_cast<std::size_t>(m.length());
+            while (next < text.size() && std::isspace(static_cast<unsigned char>(text[next]))) {
+                ++next;
+            }
+            constexpr std::string_view kyiv_genitive = "Києва";
+            if (std::string_view(text).substr(next).starts_with(kyiv_genitive)) {
+                std::size_t stop = next + kyiv_genitive.size() + 1;
+                const auto following = next + kyiv_genitive.size() < text.size()
+                                           ? decode_one(text, next + kyiv_genitive.size(), stop)
+                                           : U'\0';
+                if (!is_uk_letter(following)) {
+                    return std::string("міста");
+                }
+            }
+        }
+        if (key == "с" && lower_text(text.substr(0, position)).ends_with("вакуумі ")) {
+            // Here "с." is the speed-of-light variable ending a sentence, not
+            // a village abbreviation introducing the following sentence.
+            return m.str();
         }
         return words.at(key);
     });
@@ -927,6 +965,14 @@ std::string normalize_identifiers(std::string text)
         const auto delimiter = m[3].str();
         const auto spoken_delimiter = delimiter.find_first_not_of(" \t\r\n") == std::string::npos ? " " : " дефіс ";
         return m[1].str() + label + spoken_delimiter + read_standard_body(m[4].str());
+    });
+    // IEEE 802 revisions also occur without the "IEEE" label.  They are
+    // identifiers, not decimals, ranges, or unit-bearing measurements (802.16m).
+    static const std::regex bare_ieee_revision(
+        R"((^|[^A-Za-z0-9.])(802\.\d{1,2}(?:[A-Za-z]{1,3})?(?:(?:-|–|—)\d{4})?)(?![A-Za-z0-9]|\.\d))",
+        std::regex::icase);
+    text = regex_sub(text, bare_ieee_revision, [&](const std::smatch& m) {
+        return m[1].str() + read_standard_body(m[2].str());
     });
     static const std::regex uuid(
         R"(\b([0-9A-Fa-f]{8})-([0-9A-Fa-f]{4})-([0-9A-Fa-f]{4})-([0-9A-Fa-f]{4})-([0-9A-Fa-f]{12})\b)");

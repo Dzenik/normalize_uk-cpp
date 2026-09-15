@@ -5,6 +5,27 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Bare IEEE 802 revisions, including letter suffixes and year-like revisions, are read as identifiers rather than
+  decimals, measurement units, malformed scientific notation, or numeric ranges.
+- Dissertation speciality codes after a `... наук:` label are read as dotted codes rather than invalid dates.
+- Year spans after `У`/`В` retain the preposition and gain a grammatical `період від ... до ... року` reading, with
+  or without an abbreviated year suffix.
+- Wikipedia page-reference markers such as `.:33–34:39–43` are removed before clock validation so their digits are
+  not partially spoken; city abbreviations now use `місті` or `міста` after locative or genitive prepositions, and
+  the unambiguous form `м. Києва` uses `міста`.
+- The speed-of-light variable `с.` after `у вакуумі` is no longer interpreted as a village abbreviation.
+- Ordinal suffixes such as `1-ше`, `2-ге`, and `3-тє` now produce ordinal words, while mixed-script data rates such as
+  `10 Гбіт/c` read as gigabits per second.
+- Progressive-scan video resolutions such as `720p` and `1080p-якістю` now retain the spoken `пі` suffix instead of
+  joining a homoglyph to the number.
+- Uncertainty checks now read complete UTF-8 Cyrillic unit tokens, avoiding false unknown-unit warnings for known
+  abbreviations, compound rates, ordinary prepositions after years, dates followed by month names, chemical formulas,
+  and mobile-network generations.
+
 ## [0.4.0] - 2026-09-14
 
 ### Added
