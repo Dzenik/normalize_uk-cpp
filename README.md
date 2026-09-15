@@ -51,7 +51,7 @@ print([token.text for token in nuk.tokenize("П'ять зв'язків.")])
 
 More examples live in `examples/python/`.
 
-Tags matching the version in `pyproject.toml` (for example, `v0.4.3`) trigger
+Tags matching the version in `pyproject.toml` (for example, `v0.4.4`) trigger
 wheel builds for supported Python versions. The workflow uploads the wheels to
 GitHub Release Assets, then downloads those Assets and publishes them to PyPI.
 

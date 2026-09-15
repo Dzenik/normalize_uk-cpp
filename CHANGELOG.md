@@ -7,6 +7,8 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-09-15
+
 ### Added
 
 - Callers can load a UTF-8 Latin-to-Ukrainian vocabulary TSV at runtime and
@@ -15,6 +17,11 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Python callers can pass a vocabulary dict directly to normalization and
   uncertainty calls; call-specific entries override matching option entries
   without changing the supplied options object.
+
+### Changed
+
+- Decomposed large normalization and tokenization modules into focused source
+  files while preserving their public APIs and behavior.
 
 ## [0.4.3] - 2026-09-15
 
@@ -216,6 +223,7 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Bare ranges before sentence punctuation, ranges following a punctuation dash, and English `P.`/`pp.` page ranges
   now honor `RangeStyle.FromTo`.
 
+[0.4.4]: https://github.com/ThirdLetterC/normalize_uk-cpp/releases/tag/v0.4.4
 [0.4.3]: https://github.com/ThirdLetterC/normalize_uk-cpp/releases/tag/v0.4.3
 [0.4.2]: https://github.com/ThirdLetterC/normalize_uk-cpp/releases/tag/v0.4.2
 [0.4.1]: https://github.com/ThirdLetterC/normalize_uk-cpp/releases/tag/v0.4.1
