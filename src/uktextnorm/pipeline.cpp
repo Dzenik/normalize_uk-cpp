@@ -41,7 +41,9 @@ std::string protect_opaque_markup(std::string text,
     // values (".:33–34:39–43").  Remove this metadata before invalid-time
     // protection; otherwise only fragments of the marker are spoken.
     static const std::regex wikipedia_page_citation(R"(\.(?::\d+(?:(?:-|–|—)\d+)?)+(?=\s|$))");
-    text = std::regex_replace(text, wikipedia_page_citation, ".");
+    if (text.find(".:") != std::string::npos) {
+        text = regex_sub(std::move(text), wikipedia_page_citation, [](const std::smatch&) { return "."; });
+    }
     auto protect = [&](std::string value) {
         std::string key;
         append_utf8(key, U'\uE000');
@@ -127,7 +129,7 @@ std::string protect_opaque_markup(std::string text,
     static const std::regex opaque(
         R"((<!--[\s\S]*?-->|```[\s\S]*?```|~~~[\s\S]*?~~~|``(?:[^`\r\n]|`(?!`))*``|`[^`\r\n]*`|<(code|pre)\b[^>]*>[\s\S]*?</\2\s*>|</?[A-Za-z][A-Za-z0-9:_-]*(?:\s+[^<>]*?)?\s*/?>|<![A-Za-z][^<>]*>|&(?:#[0-9]+|#[xX][0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]+);))",
         std::regex::icase);
-    text = regex_sub(text, opaque, [&](const std::smatch& m) { return protect(m.str()); });
+    text = regex_sub(std::move(text), opaque, [&](const std::smatch& m) { return protect(m.str()); });
     // std::regex cannot balance parentheses. Scan Markdown destinations so a
     // URL such as `a_(b)` remains opaque all the way to its matching `)`.
     std::string protected_links;
@@ -718,7 +720,6 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
 static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, const NormalizeOptions* options)
 {
     std::vector<UncertainSpan> spans;
-    const auto char_offsets = byte_to_char_offsets(text);
     std::set<std::pair<std::size_t, std::size_t>> seen;
     auto add = [&](std::size_t s,
                    std::size_t e,
@@ -732,15 +733,11 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
             ++e;
         }
         if (seen.insert({s, e}).second) {
-            spans.push_back({char_offsets[s],
-                             char_offsets[e],
-                             std::string(text.substr(s, e - s)),
-                             std::move(reason),
-                             category,
-                             severity});
+            spans.push_back({s, e, std::string(text.substr(s, e - s)), std::move(reason), category, severity});
         }
     };
-    std::string input(text);
+    const std::string_view input = text;
+    using ViewRegexIterator = std::regex_iterator<std::string_view::const_iterator>;
     auto decimal_value = [](std::string token) {
         replace_all(token, ",", ".");
         try {
@@ -752,7 +749,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
     static const std::regex ambiguous_numeric_date(
         R"(\b(?:0?[1-9]|1[0-2])[./-](?:0?[1-9]|1[0-2])[./-](?:\d{2}|\d{4})\b)");
     if (!options || options->numeric_date_order == NumericDateOrder::PreserveAmbiguous) {
-        for (std::sregex_iterator it(input.begin(), input.end(), ambiguous_numeric_date), end; it != end; ++it) {
+        for (ViewRegexIterator it(input.begin(), input.end(), ambiguous_numeric_date), end; it != end; ++it) {
             add((*it).position(),
                 (*it).position() + (*it).length(),
                 "ambiguous numeric date order (day/month or month/day)",
@@ -762,7 +759,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
     }
     static const std::regex ambiguous_colon(R"((^|[^\d:])(\d{1,2}):([0-5]\d)(?![\d:]))");
     if (!options || options->colon_style == ColonStyle::Contextual) {
-        for (std::sregex_iterator it(input.begin(), input.end(), ambiguous_colon), end; it != end; ++it) {
+        for (ViewRegexIterator it(input.begin(), input.end(), ambiguous_colon), end; it != end; ++it) {
             const auto hour = parse_int((*it)[2].str());
             const auto minute = parse_int((*it)[3].str());
             if (hour > 23 && !(hour == 24 && minute == 0)) {
@@ -778,7 +775,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
     }
     static const std::regex ambiguous_currency_symbol(R"((?:\$|¥)\s*\d+(?:[.,]\d+)?)");
     if (!options || options->currency_symbol_policy == CurrencySymbolPolicy::PreserveAmbiguous) {
-        for (std::sregex_iterator it(input.begin(), input.end(), ambiguous_currency_symbol), end; it != end; ++it) {
+        for (ViewRegexIterator it(input.begin(), input.end(), ambiguous_currency_symbol), end; it != end; ++it) {
             add((*it).position(),
                 (*it).position() + (*it).length(),
                 "ambiguous currency symbol (currency depends on locale)",
@@ -806,7 +803,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
         }
     });
     static const std::regex invalid_iso_date(R"((^|[^\d])(\d{4})-(\d{1,2})(?:-(\d{1,2}))?(?!\d))");
-    for (std::sregex_iterator it(input.begin(), input.end(), invalid_iso_date), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), invalid_iso_date), end; it != end; ++it) {
         const auto year = parse_int((*it)[2].str());
         const auto month = parse_int((*it)[3].str());
         const auto day = (*it)[4].matched ? parse_int((*it)[4].str()) : 1;
@@ -818,7 +815,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
         add(s, e, "invalid ISO date", UncertaintyCategory::InvalidDate, UncertaintySeverity::Error);
     }
     static const std::regex iso_week_candidate(R"(\b(\d{4})-W(\d{2})(?:-(\d))?\b)", std::regex::icase);
-    for (std::sregex_iterator it(input.begin(), input.end(), iso_week_candidate), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), iso_week_candidate), end; it != end; ++it) {
         const auto week = parse_int((*it)[2].str());
         const auto day = (*it)[3].matched ? parse_int((*it)[3].str()) : 1;
         if (is_valid_iso_week(parse_int((*it)[1].str()), week) && day >= 1 && day <= 7) {
@@ -831,7 +828,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
             UncertaintySeverity::Error);
     }
     static const std::regex iso_ordinal_candidate(R"(\b(\d{4})-(\d{3})\b)");
-    for (std::sregex_iterator it(input.begin(), input.end(), iso_ordinal_candidate), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), iso_ordinal_candidate), end; it != end; ++it) {
         const auto year = parse_int((*it)[1].str());
         const auto day = parse_int((*it)[2].str());
         const bool leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
@@ -845,7 +842,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
             UncertaintySeverity::Error);
     }
     static const std::regex timezone_offset(R"((?:UTC|GMT)\s*([+-])(\d{2}):?(\d{2})(?!\d))", std::regex::icase);
-    for (std::sregex_iterator it(input.begin(), input.end(), timezone_offset), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), timezone_offset), end; it != end; ++it) {
         const auto hour = parse_int((*it)[2].str());
         const auto minute = parse_int((*it)[3].str());
         if (minute <= 59 && (hour < 14 || (hour == 14 && minute == 0))) {
@@ -858,7 +855,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
             UncertaintySeverity::Error);
     }
     static const std::regex bare_timezone_offset(R"((^|[\s(])([+-])(\d{2}):(\d{2})(?!\d))");
-    for (std::sregex_iterator it(input.begin(), input.end(), bare_timezone_offset), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), bare_timezone_offset), end; it != end; ++it) {
         const auto hour = parse_int((*it)[3].str());
         const auto minute = parse_int((*it)[4].str());
         if (minute <= 59 && (hour < 14 || (hour == 14 && minute == 0))) {
@@ -874,7 +871,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
     static const std::regex iana_zone(R"((\b\d{1,2}:[0-5]\d(?::[0-5]\d)?\s+)([A-Za-z_+-]+/[A-Za-z0-9_+/-]+)\b)");
     static const std::unordered_set<std::string> supported_iana_zones = {
         "europe/kyiv", "europe/london", "europe/warsaw", "america/new_york", "america/los_angeles", "asia/tokyo"};
-    for (std::sregex_iterator it(input.begin(), input.end(), iana_zone), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), iana_zone), end; it != end; ++it) {
         if (supported_iana_zones.contains(lower_text((*it)[2].str()))) {
             continue;
         }
@@ -894,7 +891,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
             UncertaintySeverity::Warning);
     });
     static const std::regex invalid_time(R"((^|[^\d:])(\d{1,3}):(\d{2})(?::(\d{2}))?(?![\d:]))");
-    for (std::sregex_iterator it(input.begin(), input.end(), invalid_time), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), invalid_time), end; it != end; ++it) {
         const auto hour = parse_int((*it)[2].str());
         const auto minute = parse_int((*it)[3].str());
         const auto second = (*it)[4].matched ? parse_int((*it)[4].str()) : 0;
@@ -907,7 +904,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
     }
     static const std::regex invalid_ampm(R"((^|[^\d:])(\d{1,2}):([0-5]\d)(?::([0-5]\d))?\s*(AM|PM)(?![A-Za-z]))",
                                          std::regex::icase);
-    for (std::sregex_iterator it(input.begin(), input.end(), invalid_ampm), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), invalid_ampm), end; it != end; ++it) {
         const auto hour = parse_int((*it)[2].str());
         if (hour >= 1 && hour <= 12) {
             continue;
@@ -917,7 +914,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
         add(s, e, "invalid 12-hour clock time", UncertaintyCategory::Time, UncertaintySeverity::Error);
     }
     static const std::regex zero_fraction(R"((^|[^\d/])([+\-−]?\d+/0+)(?!\d))");
-    for (std::sregex_iterator it(input.begin(), input.end(), zero_fraction), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), zero_fraction), end; it != end; ++it) {
         const auto s = static_cast<std::size_t>((*it).position(2));
         add(s,
             s + (*it)[2].length(),
@@ -926,7 +923,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
             UncertaintySeverity::Error);
     }
     static const std::regex malformed_scientific(R"((^|[^A-Za-z\d])([+\-]?\d+(?:[.,]\d+)?[eE][+\-]?)(?!\d))");
-    for (std::sregex_iterator it(input.begin(), input.end(), malformed_scientific), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), malformed_scientific), end; it != end; ++it) {
         static const std::regex ieee_revision(R"(802\.\d{1,2}[eE])");
         if (std::regex_match((*it)[2].str(), ieee_revision)) {
             continue;
@@ -940,7 +937,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
     }
     static const std::regex ipv4_like(
         R"((^|[^\d.])(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?:/(\d{1,3}))?(?::(\d{1,6}))?(?![\d.]))");
-    for (std::sregex_iterator it(input.begin(), input.end(), ipv4_like), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), ipv4_like), end; it != end; ++it) {
         bool invalid = false;
         for (std::size_t i = 2; i <= 5; ++i) {
             invalid = invalid || parse_int((*it)[i].str()) > 255;
@@ -957,7 +954,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
     static const std::regex geo_candidate(
         R"(\bgeo\s*:\s*([+\-]?\d{1,3}(?:\.\d+)?)\s*[,;]\s*([+\-]?\d{1,3}(?:\.\d+)?)(?:\s*[,;]\s*[+\-]?\d+(?:\.\d+)?)?)",
         std::regex::icase);
-    for (std::sregex_iterator it(input.begin(), input.end(), geo_candidate), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), geo_candidate), end; it != end; ++it) {
         const auto latitude = decimal_value((*it)[1].str());
         const auto longitude = decimal_value((*it)[2].str());
         if (latitude && longitude && std::abs(*latitude) <= 90.0 && std::abs(*longitude) <= 180.0) {
@@ -971,7 +968,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
     }
     static const std::regex dms_candidate(R"((\d{1,3})\s*°\s*(\d{1,2})\s*(?:′|')\s*(\d{1,2})\s*(?:″|")\s*([NSEW]))",
                                           std::regex::icase);
-    for (std::sregex_iterator it(input.begin(), input.end(), dms_candidate), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), dms_candidate), end; it != end; ++it) {
         const auto marker = lower_text((*it)[4].str());
         const auto limit = marker == "n" || marker == "s" ? 90 : 180;
         const auto degrees = parse_int((*it)[1].str());
@@ -996,11 +993,11 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
         {"п", "пункт / пан / поверх"},
         {"обл", "область / обліковий"}};
     static const std::regex abbr(R"((^|[^А-Яа-яЄєІіЇїҐґ])(кв|обл|ст|р|м|с|в|п)\.(?![а-яіїєґ]))", std::regex::icase);
-    for (std::sregex_iterator it(input.begin(), input.end(), abbr), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), abbr), end; it != end; ++it) {
         const auto s = static_cast<std::size_t>((*it).position(2));
         auto left = input.substr(0, s);
         while (!left.empty() && left.back() == ' ') {
-            left.pop_back();
+            left.remove_suffix(1);
         }
         if (!left.empty() && std::isdigit(static_cast<unsigned char>(left.back()))) {
             continue;
@@ -1079,7 +1076,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
     });
     static const std::regex isbn_candidate(
         R"(\bISBN(?:-1[03])?\s*[:№#]?\s*((?:97[89][ -]?)?[0-9Xx](?:[ -]?[0-9Xx]){8,12})\b)", std::regex::icase);
-    for (std::sregex_iterator it(input.begin(), input.end(), isbn_candidate), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), isbn_candidate), end; it != end; ++it) {
         if (!valid_isbn((*it)[1].str())) {
             add((*it).position(),
                 (*it).position() + (*it).length(),
@@ -1089,7 +1086,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
         }
     }
     static const std::regex issn_candidate(R"(\bISSN(?:-L)?\s*[:№#]?\s*(\d{4}[ -]?\d{3}[\dXx])\b)", std::regex::icase);
-    for (std::sregex_iterator it(input.begin(), input.end(), issn_candidate), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), issn_candidate), end; it != end; ++it) {
         if (!valid_issn((*it)[1].str())) {
             add((*it).position(),
                 (*it).position() + (*it).length(),
@@ -1099,7 +1096,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
         }
     }
     static const std::regex iban_candidate(R"(\b[A-Z]{2}[ -]?\d{2}(?:[ -]?[A-Z0-9]){11,30}\b)", std::regex::icase);
-    for (std::sregex_iterator it(input.begin(), input.end(), iban_candidate), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), iban_candidate), end; it != end; ++it) {
         if (!valid_iban(it->str())) {
             add((*it).position(),
                 (*it).position() + (*it).length(),
@@ -1111,7 +1108,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
     static const std::regex full_card_candidate(
         R"((^|[^A-Za-zА-Яа-яЄєІіЇїҐґ])((?:номер\s+картки|картка|картку|картки|карта|карту)\s+(\d(?:[ -]?\d){11,18}))(?!\d))",
         std::regex::icase);
-    for (std::sregex_iterator it(input.begin(), input.end(), full_card_candidate), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), full_card_candidate), end; it != end; ++it) {
         if (!valid_luhn((*it)[3].str())) {
             const auto s = static_cast<std::size_t>((*it).position(2));
             add(s,
@@ -1122,7 +1119,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
         }
     }
     static const std::regex vin_candidate(R"(\bVIN\s*[:№#]?\s*([A-HJ-NPR-Z0-9]{17})\b)", std::regex::icase);
-    for (std::sregex_iterator it(input.begin(), input.end(), vin_candidate), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), vin_candidate), end; it != end; ++it) {
         if (!valid_vin_checksum((*it)[1].str())) {
             add((*it).position(),
                 (*it).position() + (*it).length(),
@@ -1134,7 +1131,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
     static const std::regex uuid_candidate(
         R"(\b(?:([0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12})|UUID\s*[:=]?\s*([0-9A-Fa-f]{32}))\b)",
         std::regex::icase);
-    for (std::sregex_iterator it(input.begin(), input.end(), uuid_candidate), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), uuid_candidate), end; it != end; ++it) {
         const auto value = (*it)[1].matched ? (*it)[1].str() : (*it)[2].str();
         if (!valid_uuid_variant(value)) {
             add((*it).position(),
@@ -1147,7 +1144,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
     static const std::regex hash_candidate(
         R"(\b((?:SHA-?(?:1|224|256|384|512)|SHA3-?(?:256|512)|BLAKE2[bs]|MD5))\s*[:=]?\s*([0-9A-Fa-f]{1,128})\b)",
         std::regex::icase);
-    for (std::sregex_iterator it(input.begin(), input.end(), hash_candidate), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), hash_candidate), end; it != end; ++it) {
         if (!valid_hash_length((*it)[1].str(), (*it)[2].str())) {
             add((*it).position(),
                 (*it).position() + (*it).length(),
@@ -1159,7 +1156,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
     static const std::regex identifier(
         R"((?:№\s*[A-Za-zА-Яа-яЄєІіЇїҐґ0-9]+(?:[-/][A-Za-zА-Яа-яЄєІіЇїҐґ0-9]+)+|(?:ЄДРПОУ|РНОКПП|ІПН|ЄРДР)\.?\s*[:№#]?\s*\d{6,20}|паспорт\s+[A-Za-zА-Яа-яЄєІіЇїҐґ]{2}\s*\d{6,9}|(?:номер\s+картки|картка|картку|картки|карта|карту)\s*\d(?:[ -]?\d){11,18}|\b[A-Z]{2}[ -]?\d{2}(?:[ -]?[A-Z0-9]){11,30}\b|\b(?:UUID\s*[:=]?\s*)?(?:[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}|[0-9A-Fa-f]{32})\b|\b(?:SHA-?(?:1|224|256|384|512)|SHA3-?(?:256|512)|BLAKE2[bs]|MD5)\s*[:=]?\s*[0-9A-Fa-f]{1,128}\b|\b(?:ISBN|ISSN(?:-L)?|VIN|SWIFT|BIC)\b\s*[:№#]?\s*[A-Z0-9 -]{8,32}))",
         std::regex::icase);
-    for (std::sregex_iterator it(input.begin(), input.end(), identifier), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), identifier), end; it != end; ++it) {
         add((*it).position(),
             (*it).position() + (*it).length(),
             "structured identifier (domain-specific reading may vary)",
@@ -1175,7 +1172,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
             UncertaintySeverity::Warning);
     });
     static const std::regex malformed_url(R"(\bhttps?://(?:\s|$)|\bwww\.(?:\s|$))", std::regex::icase);
-    for (std::sregex_iterator it(input.begin(), input.end(), malformed_url), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), malformed_url), end; it != end; ++it) {
         add((*it).position(),
             (*it).position() + (*it).length(),
             "malformed URL-like token",
@@ -1231,7 +1228,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
     // Match complete two-byte Cyrillic code points instead.
     static const std::regex potential_unit(
         R"((^|[^\d.,:A-Za-z\xD0-\xD3\x80-\xBF])(\d+(?:[.,]\d+)?)\s*((?:[A-Za-z]|[\xD0-\xD3][\x80-\xBF]){1,6})(?!(?:[A-Za-z]|[\xD0-\xD3][\x80-\xBF])))");
-    for (std::sregex_iterator it(input.begin(), input.end(), potential_unit), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), potential_unit), end; it != end; ++it) {
         const auto& m = *it;
         const auto original_unit = m[3].str();
         const auto unit = lower_text(original_unit);
@@ -1273,7 +1270,8 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
                 end_of_denominator = next;
                 ++letters;
             }
-            const auto full_unit = original_unit + input.substr(e, end_of_denominator - e);
+            auto full_unit = original_unit;
+            full_unit.append(input.substr(e, end_of_denominator - e));
             if (measurements().contains(full_unit) || measurements().contains(lower_text(full_unit))) {
                 continue;
             }
@@ -1323,7 +1321,8 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
             prev && governors.contains(lower_text(cap<1>(prev)))) {
             return;
         }
-        if (std::regex_search(input.substr(e), cue_after)) {
+        const auto suffix = input.substr(e);
+        if (std::regex_search(suffix.begin(), suffix.end(), cue_after)) {
             return;
         }
         add(s,
@@ -1335,7 +1334,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
     static const std::regex agreement_re(
         R"((^|[^А-Яа-яЄєІіЇїҐґ-])(близько|понад|перед|між|над|під|при|після|без|від|до|із|у|в|на|з)\s+(\d{1,6})\s+([^\s\d,.;:!?()]{3,}))",
         std::regex::icase);
-    for (std::sregex_iterator it(input.begin(), input.end(), agreement_re), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), agreement_re), end; it != end; ++it) {
         const auto noun = lower_text((*it)[4].str());
         if (counted_nouns().contains(noun) || measurements().contains((*it)[4].str()) ||
             measurements().contains(noun)) {
@@ -1356,7 +1355,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
     std::vector<std::pair<std::size_t, std::size_t>> accepted_networks;
     static const std::regex accepted_ipv4(
         R"(\b(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?:/(\d{1,3}))?(?::(\d{1,5}))?\b)");
-    for (std::sregex_iterator it(input.begin(), input.end(), accepted_ipv4), end; it != end; ++it) {
+    for (ViewRegexIterator it(input.begin(), input.end(), accepted_ipv4), end; it != end; ++it) {
         bool valid = true;
         for (std::size_t i = 1; i <= 4; ++i) {
             valid = valid && parse_int((*it)[i].str()) <= 255;
@@ -1365,7 +1364,7 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
                 (!(*it)[6].matched || parse_int((*it)[6].str()) <= 65535);
         if (valid) {
             const auto start = static_cast<std::size_t>((*it).position());
-            accepted_networks.emplace_back(char_offsets[start], char_offsets[start + (*it).length()]);
+            accepted_networks.emplace_back(start, start + (*it).length());
         }
     }
     std::vector<std::pair<std::size_t, std::size_t>> structured_ranges;
@@ -1394,6 +1393,29 @@ static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, con
     std::sort(spans.begin(), spans.end(), [](const auto& a, const auto& b) {
         return std::tie(a.start, a.stop) < std::tie(b.start, b.stop);
     });
+    // Only returned span boundaries need character offsets. Keep filtering in
+    // byte offsets, then convert the boundaries in one UTF-8 scan.
+    std::vector<std::pair<std::size_t, std::size_t*>> boundaries;
+    boundaries.reserve(spans.size() * 2);
+    for (auto& span : spans) {
+        boundaries.emplace_back(span.start, &span.start);
+        boundaries.emplace_back(span.stop, &span.stop);
+    }
+    std::sort(boundaries.begin(), boundaries.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    std::size_t byte_offset = 0;
+    std::size_t character_offset = 0;
+    for (const auto& [target, destination] : boundaries) {
+        while (byte_offset < target) {
+            std::size_t next = byte_offset + 1;
+            decode_one(text, byte_offset, next);
+            if (next > target) {
+                break;
+            }
+            byte_offset = next;
+            ++character_offset;
+        }
+        *destination = character_offset;
+    }
     return spans;
 }
 

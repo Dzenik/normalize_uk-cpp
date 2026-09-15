@@ -120,13 +120,15 @@ std::string normalize_currency(std::string text)
     static const std::string amount = "(" + std::string(amount_token) + ")";
     text = normalize_regional_currency_aliases(std::move(text));
     static const std::regex signed_prefix("([+-])\\s*(" + currency_token_alt() + ")\\s*(?=\\d)", std::regex::icase);
-    text = regex_sub(text, signed_prefix, [](const std::smatch& m) { return m[2].str() + m[1].str(); });
+    text = regex_sub(std::move(text), signed_prefix, [](const std::smatch& m) { return m[2].str() + m[1].str(); });
     static const std::regex accounting_prefix("\\((" + currency_token_alt() + ")\\s*(\\d+(?:[.,]\\d{1,4})?)\\)",
                                               std::regex::icase);
-    text = regex_sub(text, accounting_prefix, [](const std::smatch& m) { return "-" + m[2].str() + " " + m[1].str(); });
+    text = regex_sub(
+        std::move(text), accounting_prefix, [](const std::smatch& m) { return "-" + m[2].str() + " " + m[1].str(); });
     static const std::regex accounting("\\((\\d+(?:[.,]\\d{1,4})?)\\s*(" + currency_token_alt() + ")\\)",
                                        std::regex::icase);
-    text = regex_sub(text, accounting, [](const std::smatch& m) { return "-" + m[1].str() + " " + m[2].str(); });
+    text = regex_sub(
+        std::move(text), accounting, [](const std::smatch& m) { return "-" + m[1].str() + " " + m[2].str(); });
     static const std::vector<Currency> currencies = [] {
         std::vector<Currency> out;
         for (const auto& entry : lexicon::kCurrencies) {
@@ -257,7 +259,7 @@ std::string normalize_currency(std::string text)
     };
     for (const auto& c : currencies) {
         for (const auto& re : c.patterns) {
-            text = regex_sub(text, re, [&](const std::smatch& m) {
+            text = regex_sub(std::move(text), re, [&](const std::smatch& m) {
                 if (starts_inside_number(m)) {
                     return m.str();
                 }
@@ -268,7 +270,7 @@ std::string normalize_currency(std::string text)
     }
     static const std::regex suffix_code(amount + "\\s*(" + currency_code_alt + R"()(?![A-Za-zА-Яа-яЄєІіЇїҐґ]))",
                                         std::regex::icase);
-    text = regex_sub(text, suffix_code, [&](const std::smatch& m) {
+    text = regex_sub(std::move(text), suffix_code, [&](const std::smatch& m) {
         if (starts_inside_number(m)) {
             return m.str();
         }
@@ -278,7 +280,7 @@ std::string normalize_currency(std::string text)
     });
     static const std::regex prefix_code("(" + currency_code_alt + ")\\s*" + amount + R"((?![A-Za-zА-Яа-яЄєІіЇїҐґ]))",
                                         std::regex::icase);
-    text = regex_sub(text, prefix_code, [&](const std::smatch& m) {
+    text = regex_sub(std::move(text), prefix_code, [&](const std::smatch& m) {
         const auto& c = currencies[currency_by_code.at(lower_text(m[1].str()))];
         const auto words = amount_words(m[2].str(), c);
         return words ? *words : m.str();

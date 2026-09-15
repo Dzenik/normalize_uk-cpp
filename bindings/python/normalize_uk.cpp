@@ -5,6 +5,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -27,26 +28,28 @@ std::string span_repr(std::string_view type_name, std::size_t start, std::size_t
            " text=" + py::repr(py::str(text)).cast<std::string>() + ">";
 }
 
-std::vector<std::size_t> byte_to_character_offsets(std::string_view text)
-{
-    std::vector<std::size_t> offsets(text.size() + 1);
-    std::size_t characters = 0;
-    for (std::size_t i = 0; i < text.size(); ++i) {
-        if ((static_cast<unsigned char>(text[i]) & 0xc0) != 0x80) {
-            ++characters;
-        }
-        offsets[i + 1] = characters;
-    }
-    return offsets;
-}
-
 std::vector<Substring> copy_substrings(const std::vector<rozpodil::Substring>& chunks, std::string_view text)
 {
-    const auto offsets = byte_to_character_offsets(text);
+    std::size_t scanned_bytes = 0;
+    std::size_t characters = 0;
+    auto character_offset = [&](std::size_t target) {
+        if (target < scanned_bytes || target > text.size()) {
+            throw std::out_of_range("invalid substring offset");
+        }
+        while (scanned_bytes < target) {
+            if ((static_cast<unsigned char>(text[scanned_bytes]) & 0xc0) != 0x80) {
+                ++characters;
+            }
+            ++scanned_bytes;
+        }
+        return characters;
+    };
     std::vector<Substring> out;
     out.reserve(chunks.size());
     for (const auto& chunk : chunks) {
-        out.push_back({offsets.at(chunk.start), offsets.at(chunk.stop), std::string(chunk.text)});
+        const auto start = character_offset(chunk.start);
+        const auto stop = character_offset(chunk.stop);
+        out.push_back({start, stop, std::string(chunk.text)});
     }
     return out;
 }

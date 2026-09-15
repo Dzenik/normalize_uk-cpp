@@ -142,7 +142,7 @@ class NormalizeUkBindingTests(unittest.TestCase):
         for scanner in (nuk.split_sentences, nuk.tokenize):
             for chunk in scanner(unicode_text):
                 self.assertEqual(chunk.text, unicode_text[chunk.start : chunk.stop])
-        uncertain_text = "Версія XXI і сума 10 PLN"
+        uncertain_text = "🙂 Версія XXI і сума 10 PLN; дата 05/06/2024 🌍"
         for span in nuk.flag_uncertain(uncertain_text):
             self.assertEqual(span.text, uncertain_text[span.start : span.stop])
             self.assertFalse(span == object())

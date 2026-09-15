@@ -112,23 +112,6 @@ std::vector<Cp> codepoints(std::string_view text)
     return out;
 }
 
-std::vector<std::size_t> byte_to_char_offsets(std::string_view text)
-{
-    std::vector<std::size_t> offsets(text.size() + 1);
-    std::size_t char_offset = 0;
-    for (std::size_t i = 0; i < text.size();) {
-        std::size_t next = i + 1;
-        decode_one(text, i, next);
-        for (std::size_t byte = i; byte < next; ++byte) {
-            offsets[byte] = char_offset;
-        }
-        i = next;
-        ++char_offset;
-    }
-    offsets[text.size()] = char_offset;
-    return offsets;
-}
-
 bool has_ascii_digit(std::string_view text)
 {
     return std::ranges::any_of(text, [](unsigned char ch) { return ch >= '0' && ch <= '9'; });

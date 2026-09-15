@@ -594,7 +594,7 @@ struct SentSplit {
     std::string_view left;
     std::string_view delimiter;
     std::string_view right;
-    std::string buffer;
+    std::string_view buffer;
 };
 
 Action sent_join(const SentSplit& split)
@@ -715,26 +715,16 @@ Action sent_join(const SentSplit& split)
     return Action::None;
 }
 
-std::vector<Substring> find_substrings(const std::vector<std::string>& chunks, std::string_view text, bool trim)
+void append_substring(
+    std::vector<Substring>& out, std::string_view text, std::size_t start, std::size_t stop, bool trim)
 {
-    std::vector<Substring> out;
-    std::size_t offset = 0;
-    for (const auto& chunk : chunks) {
-        const auto found = text.find(chunk, offset);
-        if (found == std::string_view::npos) {
-            continue;
-        }
-        std::size_t start = found;
-        auto view = text.substr(found, chunk.size());
-        if (trim) {
-            view = trim_view(view, start);
-        }
-        if (!view.empty()) {
-            out.push_back({start, start + view.size(), view});
-        }
-        offset = found + chunk.size();
+    auto view = text.substr(start, stop - start);
+    if (trim) {
+        view = trim_view(view, start);
     }
-    return out;
+    if (!view.empty()) {
+        out.push_back({start, start + view.size(), view});
+    }
 }
 
 struct Atom {
@@ -742,7 +732,6 @@ struct Atom {
     std::size_t stop = 0;
     AtomType type = AtomType::Other;
     std::string_view text;
-    std::string normal;
 };
 
 bool is_token_punct(char32_t cp)
@@ -872,7 +861,7 @@ std::vector<Atom> atoms(std::string_view text)
             ++i;
         }
         auto sv = text.substr(cps[begin].start, cps[i - 1].stop - cps[begin].start);
-        out.push_back({cps[begin].start, cps[i - 1].stop, type, sv, lower_ascii_ukrainian(sv)});
+        out.push_back({cps[begin].start, cps[i - 1].stop, type, sv});
     }
     return out;
 }
@@ -966,28 +955,24 @@ bool token_join(const Atom& left_1,
         return true;
     }
     if (delimiter.empty() && left_1.type == AtomType::Int &&
-        (right_1.type == AtomType::Uk || right_1.type == AtomType::Lat) && is_known_abbreviation(right_1.normal)) {
+        (right_1.type == AtomType::Uk || right_1.type == AtomType::Lat) &&
+        is_known_abbreviation(lower_ascii_ukrainian(right_1.text))) {
         return true;
     }
-    return left_1.normal == "yahoo" && right_1.text == "!";
+    return right_1.text == "!" && lower_ascii_ukrainian(left_1.text) == "yahoo";
 }
 
 } // namespace
 
 std::vector<Substring> split_sentences(std::string_view text)
 {
-    if (std::ranges::all_of(codepoints(text), [](const Cp& cp) { return is_space(cp.value); })) {
+    auto cps = codepoints(text);
+    if (std::ranges::all_of(cps, [](const Cp& cp) { return is_space(cp.value); })) {
         return {};
     }
     static constexpr std::u32string_view delimiters = U".?!…;\"„'»”’)]}";
-    auto cps = codepoints(text);
-    struct Part {
-        bool split = false;
-        std::string value;
-        SentSplit sent;
-    };
-    std::vector<Part> parts;
-    std::size_t previous = 0;
+    std::vector<Substring> out;
+    std::size_t current_start = 0;
     for (std::size_t ci = 0; ci < cps.size(); ++ci) {
         std::size_t stop = cps[ci].stop;
         bool is_delim = contains(delimiters, cps[ci].value);
@@ -1004,7 +989,6 @@ std::vector<Substring> split_sentences(std::string_view text)
         }
         const auto start = cps[ci].start;
         const auto delimiter = text.substr(start, stop - start);
-        parts.push_back({false, std::string(text.substr(previous, start - previous)), {}});
         const auto left_start = ci > 10 ? cps[ci - 10].start : 0;
         std::size_t right_stop = text.size();
         const auto right_begin_index = delimiter_end_index;
@@ -1012,33 +996,18 @@ std::vector<Substring> split_sentences(std::string_view text)
             const auto right_end_index = std::min(cps.size(), right_begin_index + 10);
             right_stop = cps[right_end_index - 1].stop;
         }
-        parts.push_back(
-            {true,
-             {},
-             SentSplit{
-                 text.substr(left_start, start - left_start), delimiter, text.substr(stop, right_stop - stop), {}}});
-        previous = stop;
+        const SentSplit split{text.substr(left_start, start - left_start),
+                              delimiter,
+                              text.substr(stop, right_stop - stop),
+                              text.substr(current_start, start - current_start)};
+        if (sent_join(split) != Action::Join) {
+            append_substring(out, text, current_start, stop, true);
+            current_start = stop;
+        }
         ci = delimiter_end_index - 1;
     }
-    parts.push_back({false, std::string(text.substr(previous)), {}});
-    if (parts.empty()) {
-        return {};
-    }
-    std::vector<std::string> chunks;
-    std::string buffer = parts.front().value;
-    for (std::size_t i = 1; i + 1 < parts.size(); i += 2) {
-        auto split = parts[i].sent;
-        split.buffer = buffer;
-        const auto& right = parts[i + 1].value;
-        if (sent_join(split) == Action::Join) {
-            buffer += std::string(split.delimiter) + right;
-        } else {
-            chunks.push_back(buffer + std::string(split.delimiter));
-            buffer = right;
-        }
-    }
-    chunks.push_back(buffer);
-    return find_substrings(chunks, text, true);
+    append_substring(out, text, current_start, text.size(), true);
+    return out;
 }
 
 std::vector<Substring> sentenize(std::string_view text)
@@ -1052,8 +1021,9 @@ std::vector<Substring> tokenize(std::string_view text)
     if (as.empty()) {
         return {};
     }
-    std::vector<std::string> chunks;
-    std::string buffer(as.front().text);
+    std::vector<Substring> out;
+    std::size_t start = as.front().start;
+    std::size_t stop = as.front().stop;
     for (std::size_t i = 1; i < as.size(); ++i) {
         const auto delimiter = text.substr(as[i - 1].stop, as[i].start - as[i - 1].stop);
         std::optional<Atom> left_2;
@@ -1064,15 +1034,17 @@ std::vector<Substring> tokenize(std::string_view text)
         if (i + 1 < as.size()) {
             right_2 = as[i + 1];
         }
+        const auto buffer = text.substr(start, stop - start);
         if (delimiter.empty() && token_join(as[i - 1], left_2, delimiter, as[i], right_2, buffer)) {
-            buffer += std::string(as[i].text);
+            stop = as[i].stop;
         } else {
-            chunks.push_back(buffer);
-            buffer = std::string(as[i].text);
+            append_substring(out, text, start, stop, false);
+            start = as[i].start;
+            stop = as[i].stop;
         }
     }
-    chunks.push_back(buffer);
-    return find_substrings(chunks, text, false);
+    append_substring(out, text, start, stop, false);
+    return out;
 }
 
 } // namespace rozpodil

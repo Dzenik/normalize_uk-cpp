@@ -68,7 +68,6 @@ char32_t upper_cp(char32_t cp);
 std::string lower_text(std::string_view text);
 std::string capitalize_first_letter(std::string text);
 std::vector<Cp> codepoints(std::string_view text);
-std::vector<std::size_t> byte_to_char_offsets(std::string_view text);
 bool has_ascii_digit(std::string_view text);
 bool has_ascii_alpha(std::string_view text);
 bool contains_any(std::string_view text, std::string_view chars);
