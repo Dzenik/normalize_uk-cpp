@@ -4,6 +4,7 @@ from enum import Enum
 from typing import Any, cast
 
 import normalize_uk as nuk
+from normalize_uk import _normalize_uk as native
 
 
 class NormalizeUkBindingTests(unittest.TestCase):
@@ -136,6 +137,24 @@ class NormalizeUkBindingTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             options.validate_dates = 1  # type: ignore[assignment]
 
+        for field, member in (
+            ("range_style", nuk.RangeStyle.Compact),
+            ("phone_style", nuk.PhoneStyle.Grouped),
+            ("symbol_style", nuk.SymbolStyle.Expand),
+            ("date_style", nuk.DateStyle.Formal),
+            ("colon_style", nuk.ColonStyle.Contextual),
+            ("numeric_date_order", nuk.NumericDateOrder.DayMonthYear),
+            ("currency_symbol_policy", nuk.CurrencySymbolPolicy.AssumeCommon),
+            ("quote_style", nuk.QuoteStyle.Keep),
+        ):
+            with self.subTest(field=field):
+                setattr(options, field, member)
+                with self.assertRaisesRegex(
+                    TypeError, f"{field} must be a {type(member).__name__} value"
+                ):
+                    setattr(options, field, 0)
+                self.assertEqual(getattr(options, field), member)
+
         sentence = nuk.split_sentences("Привіт. Світ!")[1]
         self.assertFalse(sentence == object())
         unicode_text = "🙂 Привіт. 🌍 Світ!"
@@ -171,6 +190,30 @@ class NormalizeUkBindingTests(unittest.TestCase):
             cast(Any, nuk.normalize_ukrainian)(
                 "5 кг", options=options, preset=nuk.NormalizePreset.Default
             )
+
+    def test_text_functions_require_str(self) -> None:
+        encoded = "🙂 Привіт. Світ!".encode()
+        for function in (
+            nuk.normalize_ukrainian,
+            nuk.flag_uncertain,
+            nuk.split_sentences,
+            nuk.tokenize,
+            nuk.normalize_abbreviations,
+            nuk.expand_abbreviations,
+            nuk.transliterate_to_cyrillic,
+            native.normalize_ukrainian,
+            native.flag_uncertain,
+            native.split_sentences,
+            native.tokenize,
+        ):
+            with self.subTest(function=function.__name__):
+                with self.assertRaises(TypeError):
+                    cast(Any, function)(encoded)
+        with self.assertRaises(TypeError):
+            cast(Any, nuk.normalize_ukrainian)(encoded, options=self.options)
+        with self.assertRaises(TypeError):
+            cast(Any, nuk.flag_uncertain)(encoded, preset=nuk.NormalizePreset.Default)
+        self.assertIn("text: str", native.split_sentences.__doc__ or "")
 
     def test_policy_aware_uncertainty(self) -> None:
         text = "10:30, $12, 03/04/2026, 99:30"

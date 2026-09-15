@@ -7,13 +7,17 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-09-15
+
 ### Changed
 
+- Python text APIs now require `str` and reject UTF-8 `bytes`, so returned character offsets always index the input.
 - Python sentence and token span offsets now index Unicode characters in `str`, matching uncertainty spans and Python
   slicing; callers using UTF-8 byte offsets must adjust their slicing code.
 - Python enums are native `enum.Enum` types. Python builds require pybind11 3.0 or newer, including the CMake fallback.
 - The Python number helpers reject unsupported values and invalid digit strings or grammatical forms instead of
   silently changing their meaning. Legacy `sentenize`, `cyrilize`, and `cyrrilize` calls now emit `DeprecationWarning`.
+- Sentence splitting, tokenization, and uncertainty scanning avoid full-text offset tables and unnecessary copies.
 
 ### Added
 
@@ -23,6 +27,7 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- Assigning an invalid enum to `NormalizeOptions` now names the affected field and expected enum type in its `TypeError`.
 - Python span equality with unrelated types now returns `False` instead of raising a pybind11 argument error.
 - Governed percentage ranges such as `на 60-80%` no longer read a dangling string view; the sanitizer test now passes.
 
@@ -185,5 +190,6 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Bare ranges before sentence punctuation, ranges following a punctuation dash, and English `P.`/`pp.` page ranges
   now honor `RangeStyle.FromTo`.
 
+[0.4.2]: https://github.com/ThirdLetterC/normalize_uk-cpp/releases/tag/v0.4.2
 [0.4.1]: https://github.com/ThirdLetterC/normalize_uk-cpp/releases/tag/v0.4.1
 [0.4.0]: https://github.com/ThirdLetterC/normalize_uk-cpp/releases/tag/v0.4.0

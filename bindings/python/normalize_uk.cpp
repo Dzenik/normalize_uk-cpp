@@ -77,11 +77,21 @@ bool option_bool(py::handle value, std::string_view name)
     return py::cast<bool>(value);
 }
 
+template <typename Fn>
+auto with_text(py::str value, Fn fn)
+{
+    const auto text = py::cast<std::string_view>(value);
+    py::gil_scoped_release release;
+    return fn(text);
+}
+
 template <typename Enum>
 Enum option_enum(py::handle value, std::string_view name)
 {
     if (!py::isinstance<Enum>(value)) {
-        throw py::type_error(std::string(name) + " must be an enum value of the matching type");
+        const auto enum_type = py::type::of(py::cast(Enum{}));
+        const auto enum_name = py::cast<std::string>(enum_type.attr("__name__"));
+        throw py::type_error(std::string(name) + " must be a " + enum_name + " value");
     }
     return py::cast<Enum>(value);
 }
@@ -133,6 +143,19 @@ void bind_bool_option(py::class_<uktextnorm::NormalizeOptions>& cls,
         [member](const uktextnorm::NormalizeOptions& options) { return options.*member; },
         [member, name](uktextnorm::NormalizeOptions& options, py::handle value) {
             options.*member = option_bool(value, name);
+        });
+}
+
+template <typename Enum>
+void bind_enum_option(py::class_<uktextnorm::NormalizeOptions>& cls,
+                      const char* name,
+                      Enum uktextnorm::NormalizeOptions::* member)
+{
+    cls.def_property(
+        name,
+        [member](const uktextnorm::NormalizeOptions& options) { return options.*member; },
+        [member, name](uktextnorm::NormalizeOptions& options, py::handle value) {
+            options.*member = option_enum<Enum>(value, name);
         });
 }
 
@@ -236,23 +259,22 @@ PYBIND11_MODULE(_normalize_uk, m)
         });
 
     auto options_class = py::class_<uktextnorm::NormalizeOptions>(m, "NormalizeOptions");
-    options_class
-        .def(py::init([](uktextnorm::NormalizePreset preset, py::kwargs overrides) {
-                 auto options = uktextnorm::options_for_preset(preset);
-                 for (auto item : overrides) {
-                     set_option(options, py::cast<std::string>(item.first), item.second);
-                 }
-                 return options;
-             }),
-             py::arg("preset") = uktextnorm::NormalizePreset::Default)
-        .def_readwrite("range_style", &uktextnorm::NormalizeOptions::range_style)
-        .def_readwrite("phone_style", &uktextnorm::NormalizeOptions::phone_style)
-        .def_readwrite("symbol_style", &uktextnorm::NormalizeOptions::symbol_style)
-        .def_readwrite("date_style", &uktextnorm::NormalizeOptions::date_style)
-        .def_readwrite("colon_style", &uktextnorm::NormalizeOptions::colon_style)
-        .def_readwrite("numeric_date_order", &uktextnorm::NormalizeOptions::numeric_date_order)
-        .def_readwrite("currency_symbol_policy", &uktextnorm::NormalizeOptions::currency_symbol_policy)
-        .def_readwrite("quote_style", &uktextnorm::NormalizeOptions::quote_style);
+    options_class.def(py::init([](uktextnorm::NormalizePreset preset, py::kwargs overrides) {
+                          auto options = uktextnorm::options_for_preset(preset);
+                          for (auto item : overrides) {
+                              set_option(options, py::cast<std::string>(item.first), item.second);
+                          }
+                          return options;
+                      }),
+                      py::arg("preset") = uktextnorm::NormalizePreset::Default);
+    bind_enum_option(options_class, "range_style", &uktextnorm::NormalizeOptions::range_style);
+    bind_enum_option(options_class, "phone_style", &uktextnorm::NormalizeOptions::phone_style);
+    bind_enum_option(options_class, "symbol_style", &uktextnorm::NormalizeOptions::symbol_style);
+    bind_enum_option(options_class, "date_style", &uktextnorm::NormalizeOptions::date_style);
+    bind_enum_option(options_class, "colon_style", &uktextnorm::NormalizeOptions::colon_style);
+    bind_enum_option(options_class, "numeric_date_order", &uktextnorm::NormalizeOptions::numeric_date_order);
+    bind_enum_option(options_class, "currency_symbol_policy", &uktextnorm::NormalizeOptions::currency_symbol_policy);
+    bind_enum_option(options_class, "quote_style", &uktextnorm::NormalizeOptions::quote_style);
     bind_bool_option(options_class, "expand_known_acronyms", &uktextnorm::NormalizeOptions::expand_known_acronyms);
     bind_bool_option(options_class, "spell_unknown_acronyms", &uktextnorm::NormalizeOptions::spell_unknown_acronyms);
     bind_bool_option(options_class, "normalize_english_words", &uktextnorm::NormalizeOptions::normalize_english_words);
@@ -278,74 +300,74 @@ PYBIND11_MODULE(_normalize_uk, m)
     m.def("number_to_words_digit_by_digit", &uktextnorm::number_to_words_digit_by_digit, py::arg("digits"));
     m.def("number_to_ordinal_words", &uktextnorm::number_to_ordinal_words, py::arg("n"), py::arg("form") = "nom_m");
     m.def("number_to_words_case", &uktextnorm::number_to_words_case, py::arg("n"), py::arg("grammatical_case"));
-    m.def("normalize_abbreviations",
-          &uktextnorm::normalize_abbreviations,
-          py::arg("text"),
-          py::call_guard<py::gil_scoped_release>());
-    m.def("expand_abbreviations",
-          &uktextnorm::expand_abbreviations,
-          py::arg("text"),
-          py::call_guard<py::gil_scoped_release>());
-    m.def("transliterate_to_cyrillic",
-          &uktextnorm::transliterate_to_cyrillic,
-          py::arg("text"),
-          py::call_guard<py::gil_scoped_release>());
-    m.def("cyrilize", &uktextnorm::cyrilize, py::arg("text"), py::call_guard<py::gil_scoped_release>());
-    m.def("cyrrilize", &uktextnorm::cyrrilize, py::arg("text"), py::call_guard<py::gil_scoped_release>());
+    m.def(
+        "normalize_abbreviations",
+        [](py::str text) { return with_text(text, uktextnorm::normalize_abbreviations); },
+        py::arg("text"));
+    m.def(
+        "expand_abbreviations",
+        [](py::str text) { return with_text(text, uktextnorm::expand_abbreviations); },
+        py::arg("text"));
+    m.def(
+        "transliterate_to_cyrillic",
+        [](py::str text) { return with_text(text, uktextnorm::transliterate_to_cyrillic); },
+        py::arg("text"));
+    m.def("cyrilize", [](py::str text) { return with_text(text, uktextnorm::cyrilize); }, py::arg("text"));
+    m.def("cyrrilize", [](py::str text) { return with_text(text, uktextnorm::cyrrilize); }, py::arg("text"));
     m.def(
         "normalize_ukrainian",
-        [](std::string_view text) { return uktextnorm::normalize_ukrainian(text); },
-        py::arg("text"),
-        py::call_guard<py::gil_scoped_release>());
+        [](py::str text) {
+            return with_text(text, [](std::string_view view) { return uktextnorm::normalize_ukrainian(view); });
+        },
+        py::arg("text"));
     m.def(
         "normalize_ukrainian",
-        [](std::string_view text, const uktextnorm::NormalizeOptions& options) {
+        [](py::str text, const uktextnorm::NormalizeOptions& options) {
             const auto snapshot = options;
-            py::gil_scoped_release release;
-            return uktextnorm::normalize_ukrainian(text, snapshot);
+            return with_text(text,
+                             [&](std::string_view view) { return uktextnorm::normalize_ukrainian(view, snapshot); });
         },
         py::arg("text"),
         py::arg("options"));
     m.def(
         "normalize_ukrainian",
-        [](std::string_view text, uktextnorm::NormalizePreset preset) {
-            return uktextnorm::normalize_ukrainian(text, preset);
+        [](py::str text, uktextnorm::NormalizePreset preset) {
+            return with_text(text,
+                             [&](std::string_view view) { return uktextnorm::normalize_ukrainian(view, preset); });
         },
         py::arg("text"),
-        py::arg("preset"),
-        py::call_guard<py::gil_scoped_release>());
+        py::arg("preset"));
     m.def(
         "normalize_ukrainian_with_preset",
-        [](std::string_view text, uktextnorm::NormalizePreset preset) {
-            return uktextnorm::normalize_ukrainian_with_preset(text, preset);
+        [](py::str text, uktextnorm::NormalizePreset preset) {
+            return with_text(
+                text, [&](std::string_view view) { return uktextnorm::normalize_ukrainian_with_preset(view, preset); });
         },
         py::arg("text"),
-        py::arg("preset") = uktextnorm::NormalizePreset::Default,
-        py::call_guard<py::gil_scoped_release>());
+        py::arg("preset") = uktextnorm::NormalizePreset::Default);
     m.def(
         "flag_uncertain",
-        [](std::string_view text) { return uktextnorm::flag_uncertain(text); },
-        py::arg("text"),
-        py::call_guard<py::gil_scoped_release>());
+        [](py::str text) {
+            return with_text(text, [](std::string_view view) { return uktextnorm::flag_uncertain(view); });
+        },
+        py::arg("text"));
     m.def(
         "flag_uncertain",
-        [](std::string_view text, const uktextnorm::NormalizeOptions& options) {
+        [](py::str text, const uktextnorm::NormalizeOptions& options) {
             const auto snapshot = options;
-            py::gil_scoped_release release;
-            return uktextnorm::flag_uncertain(text, snapshot);
+            return with_text(text, [&](std::string_view view) { return uktextnorm::flag_uncertain(view, snapshot); });
         },
         py::arg("text"),
         py::arg("options"));
     m.def(
         "flag_uncertain",
-        [](std::string_view text, uktextnorm::NormalizePreset preset) {
+        [](py::str text, uktextnorm::NormalizePreset preset) {
             const auto options = uktextnorm::options_for_preset(preset);
-            return uktextnorm::flag_uncertain(text, options);
+            return with_text(text, [&](std::string_view view) { return uktextnorm::flag_uncertain(view, options); });
         },
         py::arg("text"),
-        py::arg("preset"),
-        py::call_guard<py::gil_scoped_release>());
-    m.def("split_sentences", &split_sentences, py::arg("text"), py::call_guard<py::gil_scoped_release>());
-    m.def("sentenize", &legacy_sentenize, py::arg("text"), py::call_guard<py::gil_scoped_release>());
-    m.def("tokenize", &tokenize, py::arg("text"), py::call_guard<py::gil_scoped_release>());
+        py::arg("preset"));
+    m.def("split_sentences", [](py::str text) { return with_text(text, split_sentences); }, py::arg("text"));
+    m.def("sentenize", [](py::str text) { return with_text(text, legacy_sentenize); }, py::arg("text"));
+    m.def("tokenize", [](py::str text) { return with_text(text, tokenize); }, py::arg("text"));
 }
