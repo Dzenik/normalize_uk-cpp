@@ -194,17 +194,17 @@ endif()
 if(NORMALIZE_UK_CPP_BUILD_PYTHON)
     find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development.Module)
     set(PYBIND11_FINDPYTHON ON)
-    find_package(pybind11 CONFIG QUIET)
+    find_package(pybind11 3.0 CONFIG QUIET)
 
     if(NOT pybind11_FOUND)
         if(NOT NORMALIZE_UK_CPP_FETCH_PYBIND11)
-            message(FATAL_ERROR "pybind11 was not found. Install pybind11 or enable NORMALIZE_UK_CPP_FETCH_PYBIND11.")
+            message(FATAL_ERROR "pybind11 3.0 or newer was not found. Install pybind11 or enable NORMALIZE_UK_CPP_FETCH_PYBIND11.")
         endif()
         include(FetchContent)
         FetchContent_Declare(
             pybind11
             GIT_REPOSITORY https://github.com/pybind/pybind11.git
-            GIT_TAG v2.13.6
+            GIT_TAG v3.0.1
         )
         FetchContent_MakeAvailable(pybind11)
     endif()

@@ -28,12 +28,46 @@ import normalize_uk as nuk
 
 print(nuk.number_to_words(123))
 print(nuk.normalize_ukrainian("01.05.2024"))
-print(nuk.normalize_ukrainian_with_preset("01.05.2024", nuk.NormalizePreset.TtsFriendly))
+print(nuk.normalize_ukrainian("01.05.2024", preset=nuk.NormalizePreset.TtsFriendly))
 print([sentence.text for sentence in nuk.split_sentences("П'ять зв'язків. Два.")])
 print([token.text for token in nuk.tokenize("П'ять зв'язків.")])
 ```
 
 More examples live in `examples/python/`.
+
+`NormalizeOptions` accepts a preset and named overrides at construction time:
+
+```python
+options = nuk.NormalizeOptions(
+    preset=nuk.NormalizePreset.TtsFriendly,
+    range_style=nuk.RangeStyle.Compact,
+    numeric_date_order=nuk.NumericDateOrder.DayMonthYear,
+)
+result = nuk.normalize_ukrainian("5–7 кг", options=options)
+spans = nuk.flag_uncertain("10:30, $12", options=options)
+```
+
+Pass either `options=` or `preset=` to `normalize_ukrainian` and `flag_uncertain`.
+The older positional options/preset calls and `normalize_ukrainian_with_preset()` remain available.
+Without options, `flag_uncertain()` reports all ambiguity candidates. With explicit options
+or a preset, it omits warnings for ambiguous dates, colon pairs, and currency symbols
+when the selected policy resolves them; invalid-value diagnostics remain.
+
+`Substring.start`/`stop` and `UncertainSpan.start`/`stop` are Python `str` indexes,
+with `stop` exclusive: `span.text == source[span.start:span.stop]`. They count Unicode
+code points, matching Python slicing, rather than UTF-8 bytes.
+
+`number_to_words()`, `number_to_ordinal_words()`, and `number_to_words_case()` accept
+integers from 0 through `999999999999999999`. Values outside that range raise
+`ValueError`; non-integers raise `TypeError`. `number_to_words_digit_by_digit()` accepts
+a nonempty string of ASCII digits only and preserves leading zeroes. Its invalid input
+raises `ValueError`. Ordinal forms are `nom_m`, `nom_n`, `nom_f`, `nom_pl`, `gen`, `dat`,
+`prep`, `loc`, `pl`, `loc_pl`, `acc_f`, `gen_f`, `ins`, `ins_f`, `ins_pl`, and `loc_f`.
+Cardinal cases are `gen`, `dat`, `instr`, and `prep`. Unknown forms raise `ValueError`.
+
+The legacy spellings `sentenize()`, `cyrilize()`, and `cyrrilize()` remain available
+but issue `DeprecationWarning`; use `split_sentences()` and
+`transliterate_to_cyrillic()` in new code.
 
 ## Currency and cryptocurrency coverage
 

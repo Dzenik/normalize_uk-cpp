@@ -715,7 +715,7 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
     return restore_opaque_markup(normalize_output_spacing(trim_spaces(std::move(text))), protected_spans);
 }
 
-std::vector<UncertainSpan> flag_uncertain(std::string_view text)
+static std::vector<UncertainSpan> flag_uncertain_impl(std::string_view text, const NormalizeOptions* options)
 {
     std::vector<UncertainSpan> spans;
     const auto char_offsets = byte_to_char_offsets(text);
@@ -751,34 +751,40 @@ std::vector<UncertainSpan> flag_uncertain(std::string_view text)
     };
     static const std::regex ambiguous_numeric_date(
         R"(\b(?:0?[1-9]|1[0-2])[./-](?:0?[1-9]|1[0-2])[./-](?:\d{2}|\d{4})\b)");
-    for (std::sregex_iterator it(input.begin(), input.end(), ambiguous_numeric_date), end; it != end; ++it) {
-        add((*it).position(),
-            (*it).position() + (*it).length(),
-            "ambiguous numeric date order (day/month or month/day)",
-            UncertaintyCategory::Date,
-            UncertaintySeverity::Warning);
+    if (!options || options->numeric_date_order == NumericDateOrder::PreserveAmbiguous) {
+        for (std::sregex_iterator it(input.begin(), input.end(), ambiguous_numeric_date), end; it != end; ++it) {
+            add((*it).position(),
+                (*it).position() + (*it).length(),
+                "ambiguous numeric date order (day/month or month/day)",
+                UncertaintyCategory::Date,
+                UncertaintySeverity::Warning);
+        }
     }
     static const std::regex ambiguous_colon(R"((^|[^\d:])(\d{1,2}):([0-5]\d)(?![\d:]))");
-    for (std::sregex_iterator it(input.begin(), input.end(), ambiguous_colon), end; it != end; ++it) {
-        const auto hour = parse_int((*it)[2].str());
-        const auto minute = parse_int((*it)[3].str());
-        if (hour > 23 && !(hour == 24 && minute == 0)) {
-            continue;
+    if (!options || options->colon_style == ColonStyle::Contextual) {
+        for (std::sregex_iterator it(input.begin(), input.end(), ambiguous_colon), end; it != end; ++it) {
+            const auto hour = parse_int((*it)[2].str());
+            const auto minute = parse_int((*it)[3].str());
+            if (hour > 23 && !(hour == 24 && minute == 0)) {
+                continue;
+            }
+            const auto s = static_cast<std::size_t>((*it).position(2));
+            add(s,
+                s + (*it)[2].length() + 1 + (*it)[3].length(),
+                "ambiguous colon pair (clock time or ratio)",
+                UncertaintyCategory::Time,
+                UncertaintySeverity::Warning);
         }
-        const auto s = static_cast<std::size_t>((*it).position(2));
-        add(s,
-            s + (*it)[2].length() + 1 + (*it)[3].length(),
-            "ambiguous colon pair (clock time or ratio)",
-            UncertaintyCategory::Time,
-            UncertaintySeverity::Warning);
     }
     static const std::regex ambiguous_currency_symbol(R"((?:\$|¥)\s*\d+(?:[.,]\d+)?)");
-    for (std::sregex_iterator it(input.begin(), input.end(), ambiguous_currency_symbol), end; it != end; ++it) {
-        add((*it).position(),
-            (*it).position() + (*it).length(),
-            "ambiguous currency symbol (currency depends on locale)",
-            UncertaintyCategory::Currency,
-            UncertaintySeverity::Warning);
+    if (!options || options->currency_symbol_policy == CurrencySymbolPolicy::PreserveAmbiguous) {
+        for (std::sregex_iterator it(input.begin(), input.end(), ambiguous_currency_symbol), end; it != end; ++it) {
+            add((*it).position(),
+                (*it).position() + (*it).length(),
+                "ambiguous currency symbol (currency depends on locale)",
+                UncertaintyCategory::Currency,
+                UncertaintySeverity::Warning);
+        }
     }
     ctre_each<R"((^|[^\d])(\d{1,2})\.(\d{1,2})\.(\d{3,4})(?![\d]))">(input, [&](const auto& m) {
         const auto day = parse_int(cap<2>(m));
@@ -1389,6 +1395,16 @@ std::vector<UncertainSpan> flag_uncertain(std::string_view text)
         return std::tie(a.start, a.stop) < std::tie(b.start, b.stop);
     });
     return spans;
+}
+
+std::vector<UncertainSpan> flag_uncertain(std::string_view text)
+{
+    return flag_uncertain_impl(text, nullptr);
+}
+
+std::vector<UncertainSpan> flag_uncertain(std::string_view text, const NormalizeOptions& options)
+{
+    return flag_uncertain_impl(text, &options);
 }
 
 } // namespace uktextnorm

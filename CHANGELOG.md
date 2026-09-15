@@ -7,6 +7,24 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- Python sentence and token span offsets now index Unicode characters in `str`, matching uncertainty spans and Python
+  slicing; callers using UTF-8 byte offsets must adjust their slicing code.
+- Python enums are native `enum.Enum` types. Python builds require pybind11 3.0 or newer, including the CMake fallback.
+- The Python number helpers reject unsupported values and invalid digit strings or grammatical forms instead of
+  silently changing their meaning. Legacy `sentenize`, `cyrilize`, and `cyrrilize` calls now emit `DeprecationWarning`.
+
+### Added
+
+- `NormalizeOptions` accepts named field overrides at construction, and `normalize_ukrainian` and `flag_uncertain`
+  accept explicit `options=` or `preset=` keyword arguments. Policy-aware uncertainty scanning omits ambiguity
+  warnings resolved by the supplied policy while retaining invalid-value diagnostics.
+
+### Fixed
+
+- Python span equality with unrelated types now returns `False` instead of raising a pybind11 argument error.
+
 ## [0.4.1] - 2026-09-15
 
 ### Fixed

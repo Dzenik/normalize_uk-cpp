@@ -1,4 +1,6 @@
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from enum import Enum
 
 import normalize_uk as nuk
 
@@ -95,12 +97,90 @@ class NormalizeUkBindingTests(unittest.TestCase):
         sentences = nuk.split_sentences(text)
         self.assertEqual([part.text for part in sentences], ["Привіт.", "Світ!"])
         for sentence in sentences:
-            self.assertEqual(sentence.text, text.encode()[sentence.start : sentence.stop].decode())
-        self.assertEqual(nuk.sentenize(text), sentences)
+            self.assertEqual(sentence.text, text[sentence.start : sentence.stop])
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(nuk.sentenize(text), sentences)
         tokens = nuk.tokenize("Два слова")
         self.assertTrue(tokens)
         for token in tokens:
-            self.assertEqual(token.text, "Два слова".encode()[token.start : token.stop].decode())
+            self.assertEqual(token.text, "Два слова"[token.start : token.stop])
+
+    def test_python_api_contracts(self) -> None:
+        self.assertIsInstance(nuk.NormalizePreset.Default, Enum)
+        options = nuk.NormalizeOptions(
+            preset=nuk.NormalizePreset.TtsFriendly,
+            range_style=nuk.RangeStyle.Compact,
+            validate_dates=False,
+        )
+        self.assertEqual(options.range_style, nuk.RangeStyle.Compact)
+        self.assertFalse(options.validate_dates)
+        with self.assertRaises(TypeError):
+            nuk.NormalizeOptions(unknown_option=True)  # type: ignore[call-arg]
+        with self.assertRaises(TypeError):
+            nuk.NormalizeOptions(validate_dates=1)  # type: ignore[arg-type]
+        with self.assertRaises(TypeError):
+            nuk.NormalizeOptions(range_style=0)  # type: ignore[arg-type]
+        with self.assertRaises(TypeError):
+            options.validate_dates = 1  # type: ignore[assignment]
+
+        sentence = nuk.split_sentences("Привіт. Світ!")[1]
+        self.assertFalse(sentence == object())
+        unicode_text = "🙂 Привіт. 🌍 Світ!"
+        for scanner in (nuk.split_sentences, nuk.tokenize):
+            for chunk in scanner(unicode_text):
+                self.assertEqual(chunk.text, unicode_text[chunk.start : chunk.stop])
+        uncertain_text = "Версія XXI і сума 10 PLN"
+        for span in nuk.flag_uncertain(uncertain_text):
+            self.assertEqual(span.text, uncertain_text[span.start : span.stop])
+            self.assertFalse(span == object())
+
+        self.assertEqual(nuk.number_to_words_digit_by_digit("001"), "нуль нуль один")
+        for bad_digits in ("", "12x3", "１２", "١٢"):
+            with self.subTest(digits=bad_digits), self.assertRaises(ValueError):
+                nuk.number_to_words_digit_by_digit(bad_digits)
+        for number in (-1, 10**18, 2**64):
+            with self.subTest(number=number), self.assertRaises(ValueError):
+                nuk.number_to_words(number)
+        with self.assertRaises(TypeError):
+            nuk.number_to_words(True)
+        with self.assertRaises(ValueError):
+            nuk.number_to_ordinal_words(3, "unknown")  # type: ignore[arg-type]
+        with self.assertRaises(ValueError):
+            nuk.number_to_words_case(3, "unknown")  # type: ignore[arg-type]
+
+        self.assertEqual(
+            nuk.normalize_ukrainian("5 кг", preset=nuk.NormalizePreset.TtsFriendly),
+            nuk.normalize_ukrainian_with_preset("5 кг", nuk.NormalizePreset.TtsFriendly),
+        )
+        with self.assertRaises(ValueError):
+            nuk.normalize_ukrainian("5 кг", options=options, preset=nuk.NormalizePreset.Default)  # type: ignore[call-overload]
+
+    def test_policy_aware_uncertainty(self) -> None:
+        text = "10:30, $12, 03/04/2026, 99:30"
+        default_reasons = {span.reason for span in nuk.flag_uncertain(text)}
+        self.assertIn("ambiguous colon pair (clock time or ratio)", default_reasons)
+        self.assertIn("ambiguous currency symbol (currency depends on locale)", default_reasons)
+        self.assertIn("ambiguous numeric date order (day/month or month/day)", default_reasons)
+
+        options = nuk.NormalizeOptions(
+            colon_style=nuk.ColonStyle.Ratio,
+            numeric_date_order=nuk.NumericDateOrder.DayMonthYear,
+            currency_symbol_policy=nuk.CurrencySymbolPolicy.AssumeCommon,
+        )
+        selected_reasons = {span.reason for span in nuk.flag_uncertain(text, options=options)}
+        self.assertNotIn("ambiguous colon pair (clock time or ratio)", selected_reasons)
+        self.assertNotIn("ambiguous currency symbol (currency depends on locale)", selected_reasons)
+        self.assertNotIn("ambiguous numeric date order (day/month or month/day)", selected_reasons)
+        self.assertIn("invalid clock time", selected_reasons)
+        with self.assertRaises(ValueError):
+            nuk.flag_uncertain(text, options=options, preset=nuk.NormalizePreset.Default)  # type: ignore[call-overload]
+
+    def test_parallel_native_calls(self) -> None:
+        source = "15.06.2026, +380 67 123-45-67, 5–7 кг. " * 10
+        expected = nuk.normalize_ukrainian(source, self.options)
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            outputs = list(executor.map(lambda _: nuk.normalize_ukrainian(source, self.options), range(8)))
+        self.assertEqual(outputs, [expected] * 8)
 
     def test_markup_is_preserved(self) -> None:
         self.assertEqual(
