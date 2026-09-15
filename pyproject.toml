@@ -22,6 +22,7 @@ classifiers = [
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"
+install.components = ["python"]
 cmake.version = ">=3.20"
 cmake.args = [
     "-DNORMALIZE_UK_CPP_BUILD_PYTHON=ON",

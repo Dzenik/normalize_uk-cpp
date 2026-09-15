@@ -22,6 +22,7 @@ endif()
 option(NORMALIZE_UK_CPP_BUILD_TOOLS "Build command-line tools" ON)
 option(NORMALIZE_UK_CPP_BUILD_TESTS "Build C++ tests" ${NORMALIZE_UK_CPP_DEFAULT_BUILD_TESTS})
 option(NORMALIZE_UK_CPP_BUILD_PYTHON "Build Python 3.10+ bindings" OFF)
+option(NORMALIZE_UK_CPP_ENABLE_RELEASE_IPO "Enable IPO for release Python builds when supported" ON)
 option(NORMALIZE_UK_CPP_BUILD_FUZZER "Build the libFuzzer normalization harness" OFF)
 option(NORMALIZE_UK_CPP_FETCH_CTRE "Fetch CTRE when it is not already available" ON)
 option(NORMALIZE_UK_CPP_FETCH_PYBIND11 "Fetch pybind11 when it is not already available" ON)
@@ -212,6 +213,15 @@ if(NORMALIZE_UK_CPP_BUILD_PYTHON)
     pybind11_add_module(normalize_uk_python MODULE bindings/python/normalize_uk.cpp)
     target_link_libraries(normalize_uk_python PRIVATE normalize_uk_cpp::normalize_uk_cpp)
     target_compile_features(normalize_uk_python PRIVATE cxx_std_23)
+    if(NORMALIZE_UK_CPP_ENABLE_RELEASE_IPO)
+        include(CheckIPOSupported)
+        check_ipo_supported(RESULT normalize_uk_cpp_ipo_supported OUTPUT normalize_uk_cpp_ipo_output LANGUAGES CXX)
+        if(normalize_uk_cpp_ipo_supported)
+            set_property(TARGET normalize_uk_cpp PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+        else()
+            message(STATUS "Release IPO is unavailable: ${normalize_uk_cpp_ipo_output}")
+        endif()
+    endif()
     # Keep each multi-config build in an importable package directory. Without
     # the explicit $<CONFIG> component, Visual Studio appends the configuration
     # below normalize_uk and leaves the package root without __init__.py.
@@ -246,8 +256,8 @@ if(NORMALIZE_UK_CPP_BUILD_PYTHON)
     endif()
 
     install(TARGETS normalize_uk_python
-        LIBRARY DESTINATION normalize_uk
-        RUNTIME DESTINATION normalize_uk
+        LIBRARY DESTINATION normalize_uk COMPONENT python
+        RUNTIME DESTINATION normalize_uk COMPONENT python
     )
     install(FILES
         bindings/python/normalize_uk/__init__.py
@@ -255,17 +265,19 @@ if(NORMALIZE_UK_CPP_BUILD_PYTHON)
         bindings/python/normalize_uk/_normalize_uk.pyi
         bindings/python/normalize_uk/py.typed
         DESTINATION normalize_uk
+        COMPONENT python
     )
 endif()
 
 install(TARGETS normalize_uk_cpp
     EXPORT normalize_uk_cppTargets
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT cpp
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT cpp
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT cpp
 )
-install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} COMPONENT cpp)
 install(EXPORT normalize_uk_cppTargets
     NAMESPACE normalize_uk_cpp::
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/normalize_uk_cpp
+    COMPONENT cpp
 )

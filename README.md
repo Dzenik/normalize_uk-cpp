@@ -20,6 +20,9 @@ cmake -S . -B build-python -DNORMALIZE_UK_CPP_BUILD_PYTHON=ON
 cmake --build build-python
 ```
 
+A regular CMake install includes the C++ library, headers, and CMake package.
+Python wheels contain only the Python package and compiled extension.
+
 ## Python
 
 ```sh

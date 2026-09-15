@@ -7,6 +7,11 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- Python wheels now contain only the Python package and extension; C++ archives, headers, and CMake exports remain in the
+  standalone CMake installation. Release Python builds enable IPO for the C++ core when the toolchain supports it.
+
 ## [0.4.2] - 2026-09-15
 
 ### Changed
