@@ -583,7 +583,7 @@ const std::regex& counted_genitive_re()
 
 const std::regex& counted_nouns_re()
 {
-    static const std::regex re("(^|[^А-Яа-яЄєІіЇїҐґ\\d])([1-9]\\d{0,5})\\s+(" + counted_noun_alt() +
+    static const std::regex re("(^|[^А-Яа-яЄєІіЇїҐґ\\d/])([1-9]\\d{0,5})\\s+(" + counted_noun_alt() +
                                    R"()(?![А-Яа-яЄєІіЇїҐґ]))",
                                std::regex::icase);
     return re;

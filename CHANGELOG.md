@@ -7,6 +7,17 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- Expanded built-in readings for common brands, English technical terms,
+  Ukrainian acronyms and abbreviations, counted nouns, and Latin measurement
+  symbols, including micro-unit variants.
+
+### Fixed
+
+- Counted noun readings no longer consume the denominator of a mixed fraction,
+  and expanded abbreviations preserve an initial capital letter.
+
 ## [0.4.4] - 2026-09-15
 
 ### Added

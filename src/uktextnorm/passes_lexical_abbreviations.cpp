@@ -81,7 +81,12 @@ std::string normalize_abbreviations(std::string_view text)
                 if ((is_word_character(key_start) && !left_boundary) || !right_boundary) {
                     continue;
                 }
-                out += abbreviation_map().at(compact_spaces_lower(std::string_view(text).substr(i, pos - i)));
+                auto expansion = abbreviation_map().at(compact_spaces_lower(std::string_view(text).substr(i, pos - i)));
+                std::size_t first_stop = i + 1;
+                if (is_upper_uk(decode_one(text, i, first_stop))) {
+                    expansion = capitalize_first_letter(std::move(expansion));
+                }
+                out += expansion;
                 if (key.ends_with('.') && pos == text.size()) {
                     out.push_back('.');
                 }

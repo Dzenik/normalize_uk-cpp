@@ -154,7 +154,7 @@ int main(int argc, char** argv)
     expect_eq("ordinal ins plural", uktextnorm::number_to_ordinal_words(100, "ins_pl"), "сотими");
     expect_eq("ordinal loc", uktextnorm::number_to_ordinal_words(1000, "loc"), "тисячному");
     expect_eq("case", uktextnorm::number_to_words_case(500, "gen"), "п'ятисот");
-    expect_eq("abbr", uktextnorm::normalize_abbreviations("І т. д. і т. ін."), "і так далі і таке інше.");
+    expect_eq("abbr", uktextnorm::normalize_abbreviations("І т. д. і т. ін."), "І так далі і таке інше.");
     expect_eq("acronym", uktextnorm::expand_abbreviations("СБР і НАТО"), "ес бе ер і НАТО");
     expect_eq("transliterate to cyrillic", uktextnorm::transliterate_to_cyrillic("Google shop"), "гугле шоп");
     expect_eq(
@@ -185,6 +185,25 @@ int main(int argc, char** argv)
     expect_eq("time", normalize_ukrainian("Зустріч о 06:06"), "Зустріч о шість годин шість хвилин");
     expect_eq("currency", normalize_ukrainian("Ціна 12.50 грн"), "Ціна дванадцять гривень п'ятдесят копійок");
     expect_eq("measure", normalize_ukrainian("5 кг і 2 хв"), "п'ять кілограмів і дві хвилини");
+    expect_eq("latin measurement symbols",
+              normalize_ukrainian("5 cm і 2 MHz"),
+              "п'ять сантиметрів і два мегагерци");
+    expect_eq("micro-unit symbols",
+              normalize_ukrainian("3 μL і 2 µg"),
+              "три мікролітри і два мікрограми");
+    expect_eq("new counted nouns",
+              normalize_ukrainian("2 книги і 21 сторінка"),
+              "дві книги і двадцять одна сторінка");
+    expect_eq("mixed fraction before counted noun",
+              normalize_ukrainian("2 3/4 книги"),
+              "дві і три четвертих книги");
+    expect_eq("expanded brand and technical readings",
+              normalize_ukrainian("Adobe, Firefox, browser та plugin"),
+              "адобі, фаєрфокс, браузер та плагін");
+    expect_eq("expanded acronym readings",
+              normalize_ukrainian("ШІ та ООН"),
+              "Штучний інтелект та організація об'єднаних націй");
+    expect_eq("capitalized abbreviation expansion", normalize_ukrainian("Див. табл. 2"), "Дивись таблиця два");
     expect_eq("web", normalize_ukrainian("test@example.com"), "тест равлик ексампле крапка ком");
     expect_eq("mixed",
               normalize_ukrainian("Python 3.11, GPS, 50%"),
@@ -1117,7 +1136,7 @@ int main(int argc, char** argv)
     expect_eq("signed percent", normalize_ukrainian("-5%", audit_options), "мінус п'ять відсотків");
     expect_eq("latin SI product", normalize_ukrainian("3 N*m", audit_options), "три ньютони помножити на метр");
     expect_eq(
-        "latin SI quotient", normalize_ukrainian("3 W/m²", audit_options), "три вати поділити на метр у квадраті");
+        "latin SI quotient", normalize_ukrainian("3 W/m²", audit_options), "три вати поділити на квадратний метр");
     expect_eq("ISO week duration", normalize_ukrainian("P2W", audit_options), "два тижні");
     expect_eq(
         "fractional ISO duration", normalize_ukrainian("PT1.5H", audit_options), "одна ціла і п'ять десятих години");
