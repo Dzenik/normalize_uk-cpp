@@ -375,6 +375,15 @@ std::string normalize_typography(std::string text)
     text = strip_exact_pair(std::move(text), '_');
     replace_all(text, "`", "");
     replace_all(text, "’", "'");
+    static const std::regex space_before_punctuation(R"([ \t]+(\.(?=\d|[.,;:!?]|$)|[,;:!?]))");
+    text = std::regex_replace(text, space_before_punctuation, "$1");
+    static const std::regex spaced_unit_slash(
+        R"((км|м|см³|см3|кбіт|Кбіт|мбіт|Мбіт|гбіт|Гбіт)[ \t]*/[ \t]*(год|с(?:²|2)?))");
+    text = std::regex_replace(text, spaced_unit_slash, "$1/$2");
+    static const std::regex spaced_ascii_slash(R"(([A-Za-z])[ \t]*/[ \t]*([A-Za-z]))");
+    text = std::regex_replace(text, spaced_ascii_slash, "$1/$2");
+    static const std::regex spaced_cyrillic_dimension(R"((\d)\s+(?:х|Х)\s+(\d))");
+    text = std::regex_replace(text, spaced_cyrillic_dimension, "$1 × $2");
     return text;
 }
 
@@ -453,11 +462,11 @@ std::string normalize_addresses(std::string text)
             }
             std::size_t stop = previous + 1;
             const auto cp = decode_one(text, previous, stop);
-            if (is_uk_letter(cp) || is_latin(cp) || (cp >= U'0' && cp <= U'9')) {
+            if (is_uk_letter(cp) || is_latin(cp) || (cp >= U'0' && cp <= U'9') || cp == U'/') {
                 return m.str();
             }
         }
-        if (key == "м" || key == "с") {
+        if (key == "м" || key == "с" || key == "корп") {
             auto next = position + static_cast<std::size_t>(m.length());
             while (next < text.size() && std::isspace(static_cast<unsigned char>(text[next]))) {
                 ++next;
@@ -858,29 +867,67 @@ std::string normalize_coordinates(std::string text)
 }
 std::string normalize_identifiers(std::string text)
 {
-    const auto technical_standard = [](const std::smatch& m, std::size_t body_index) {
-        std::string out = m[1].str() + m[2].str();
-        if (body_index == 4) {
-            out += spell_identifier_letters(m[3].str()) + " крапка ";
+    static const std::string standard_label =
+        R"((?:(?:ДСТУ|ТУ\s+У)(?:\s+(?:EN\s+)?ISO)?|ДНАОП|ISO(?:\s*/\s*IEC)?|IEC|IEEE|ГОСТ|ДБН))";
+    static const std::string ukrainian_standard_letter =
+        R"((?:А|Б|В|Г|Ґ|Д|Е|Є|Ж|З|И|І|Ї|Й|К|Л|М|Н|О|П|Р|С|Т|У|Ф|Х|Ц|Ч|Ш|Щ|Ю|Я))";
+    static const std::string standard_atom = "(?:[A-Za-z0-9]+|" + ukrainian_standard_letter + ")";
+    const auto read_standard_body = [](std::string_view body) {
+        std::vector<std::string> parts;
+        for (std::size_t i = 0; i < body.size();) {
+            const auto ch = static_cast<unsigned char>(body[i]);
+            if (std::isspace(ch)) {
+                ++i;
+                continue;
+            }
+            if (std::isdigit(ch)) {
+                const auto start = i++;
+                while (i < body.size() && std::isdigit(static_cast<unsigned char>(body[i]))) {
+                    ++i;
+                }
+                const auto digits = body.substr(start, i - start);
+                parts.push_back(digits.size() > 1 && digits.front() == '0' ? number_to_words_digit_by_digit(digits)
+                                                                           : number_digits_or_words(digits));
+                continue;
+            }
+            std::size_t next = i + 1;
+            const auto cp = decode_one(body, i, next);
+            if (cp == U'.') {
+                parts.emplace_back("крапка");
+            } else if (cp == U'-' || cp == U'–' || cp == U'—') {
+                parts.emplace_back("дефіс");
+            } else if (cp == U':') {
+                parts.emplace_back("двокрапка");
+            } else if (cp == U'/') {
+                parts.emplace_back("слеш");
+            } else if (is_latin(cp) || is_uk(cp)) {
+                const auto start = i;
+                while (next < body.size()) {
+                    std::size_t following = next + 1;
+                    const auto following_cp = decode_one(body, next, following);
+                    if (!is_latin(following_cp) && !is_uk(following_cp)) {
+                        break;
+                    }
+                    next = following;
+                }
+                parts.push_back(spell_identifier_letters(body.substr(start, next - start)));
+            }
+            i = next;
         }
-        out += read_dotted(m[body_index].str());
-        if (m[body_index + 1].matched) {
-            out += " дефіс " + number_digits_or_words(m[body_index + 1].str());
-        }
-        if (m[body_index + 2].matched) {
-            out += " двокрапка " + number_digits_or_words(m[body_index + 2].str());
-        }
-        return out;
+        return join(parts);
     };
-    static const std::string standard_letter =
-        R"((?:[A-Za-z]|А|Б|В|Г|Ґ|Д|Е|Є|Ж|З|И|І|Ї|Й|К|Л|М|Н|О|П|Р|С|Т|У|Ф|Х|Ц|Ч|Ш|Щ|Ю|Я))";
-    static const std::regex lettered_standard("(^|[\\s(\\[{:,;])((?:ДБН|ДСТУ|ГОСТ|ISO|IEC|IEEE)\\s+)(" +
-                                              standard_letter +
-                                              R"()\.(\d+(?:\.\d+)+)(?:(?:-|–|—)(\d+))?(?::(\d+))?\b)");
-    text = regex_sub(text, lettered_standard, [&](const std::smatch& m) { return technical_standard(m, 4); });
-    static const std::regex numeric_standard(
-        R"((^|[\s(\[{:,;])((?:ДСТУ|ГОСТ|ISO|IEC|IEEE)\s+)(\d+(?:\.\d+)+)(?:(?:-|–|—)(\d+))?(?::(\d+))?\b)");
-    text = regex_sub(text, numeric_standard, [&](const std::smatch& m) { return technical_standard(m, 3); });
+    static const std::regex technical_standard(
+        "(^|[\\s(\\[{:,;])(" + standard_label + ")(\\s+|-|–|—)((?:(?:[A-Za-z]|" + ukrainian_standard_letter +
+            ")\\.)?\\d+(?:(?:\\s*(?:\\.|:|/)\\s*|(?:-|–|—))" + standard_atom + ")*)(?![A-Za-z0-9])",
+        std::regex::icase);
+    text = regex_sub(text, technical_standard, [&](const std::smatch& m) {
+        auto label = m[2].str();
+        static const std::regex slash(R"(\s*/\s*)");
+        label = std::regex_replace(label, slash, " слеш ");
+        const auto delimiter = m[3].str();
+        const auto spoken_delimiter = delimiter.find_first_not_of(" \t\r\n") == std::string::npos ? " " : " дефіс ";
+        return m[1].str() + label + spoken_delimiter + read_standard_body(m[4].str());
+    });
     static const std::regex uuid(
         R"(\b([0-9A-Fa-f]{8})-([0-9A-Fa-f]{4})-([0-9A-Fa-f]{4})-([0-9A-Fa-f]{4})-([0-9A-Fa-f]{12})\b)");
     static const std::regex compact_uuid(R"(\bUUID\s*[:=]?\s*([0-9A-Fa-f]{32})\b)", std::regex::icase);

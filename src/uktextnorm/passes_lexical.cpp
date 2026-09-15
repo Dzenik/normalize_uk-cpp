@@ -532,6 +532,97 @@ std::string normalize_technical_alphanumeric(std::string text)
     });
 }
 
+std::string normalize_cyrillic_alphanumeric(std::string text)
+{
+    const auto cps = codepoints(text);
+    std::string out;
+    out.reserve(text.size());
+    std::size_t last = 0;
+    for (std::size_t index = 0; index < cps.size();) {
+        const auto is_token_character = [](char32_t cp) {
+            return (is_uk(cp) && !is_word_joiner(cp)) || (cp >= U'0' && cp <= U'9') || cp == U'-' || cp == U'/' ||
+                   cp == U'–' || cp == U'—';
+        };
+        if (!is_token_character(cps[index].value) || cps[index].value == U'-' || cps[index].value == U'/' ||
+            cps[index].value == U'–' || cps[index].value == U'—') {
+            ++index;
+            continue;
+        }
+        const auto start = index;
+        while (index < cps.size() && is_token_character(cps[index].value)) {
+            ++index;
+        }
+        auto stop = index;
+        while (stop > start && (cps[stop - 1].value == U'-' || cps[stop - 1].value == U'/' ||
+                                cps[stop - 1].value == U'–' || cps[stop - 1].value == U'—')) {
+            --stop;
+        }
+        bool has_digit = false;
+        bool has_ukrainian = false;
+        bool has_uppercase = false;
+        bool has_dimension_sign = false;
+        for (std::size_t i = start; i < stop; ++i) {
+            const auto cp = cps[i].value;
+            has_digit = has_digit || (cp >= U'0' && cp <= U'9');
+            has_ukrainian = has_ukrainian || (is_uk(cp) && !is_word_joiner(cp));
+            has_uppercase = has_uppercase || is_upper_uk(cp);
+            has_dimension_sign = has_dimension_sign ||
+                                 (cp == U'х' && i > start && i + 1 < stop && cps[i - 1].value >= U'0' &&
+                                  cps[i - 1].value <= U'9' && cps[i + 1].value >= U'0' && cps[i + 1].value <= U'9');
+        }
+        if (!has_digit || !has_ukrainian || (!has_uppercase && !has_dimension_sign)) {
+            continue;
+        }
+
+        out.append(text, last, cps[start].start - last);
+        std::vector<std::string> parts;
+        for (std::size_t i = start; i < stop;) {
+            const auto cp = cps[i].value;
+            if (cp >= U'0' && cp <= U'9') {
+                const auto run_start = cps[i].start;
+                while (i < stop && cps[i].value >= U'0' && cps[i].value <= U'9') {
+                    ++i;
+                }
+                parts.push_back(
+                    read_identifier_number(std::string_view(text).substr(run_start, cps[i - 1].stop - run_start)));
+                continue;
+            }
+            if (cp == U'-' || cp == U'–' || cp == U'—') {
+                parts.emplace_back("дефіс");
+                ++i;
+                continue;
+            }
+            if (cp == U'/') {
+                parts.emplace_back("слеш");
+                ++i;
+                continue;
+            }
+            if (cp == U'х' && i > start && i + 1 < stop && cps[i - 1].value >= U'0' && cps[i - 1].value <= U'9' &&
+                cps[i + 1].value >= U'0' && cps[i + 1].value <= U'9') {
+                parts.emplace_back("помножити на");
+                ++i;
+                continue;
+            }
+            const auto run_start = cps[i].start;
+            while (i < stop && is_uk(cps[i].value) && !is_word_joiner(cps[i].value) &&
+                   !(cps[i].value == U'х' && i > start && i + 1 < stop && cps[i - 1].value >= U'0' &&
+                     cps[i - 1].value <= U'9' && cps[i + 1].value >= U'0' && cps[i + 1].value <= U'9')) {
+                ++i;
+            }
+            parts.push_back(
+                spell_identifier_letters(std::string_view(text).substr(run_start, cps[i - 1].stop - run_start)));
+        }
+        out += join(parts);
+        last = cps[stop - 1].stop;
+        index = stop;
+    }
+    if (last == 0) {
+        return text;
+    }
+    out.append(text, last, std::string::npos);
+    return out;
+}
+
 } // namespace detail
 
 using namespace detail;
@@ -558,6 +649,9 @@ std::string normalize_abbreviations(std::string_view text)
                     }
                     ++kpos;
                 } else if (key[kpos] == '.') {
+                    while (pos < text.size() && text[pos] == ' ') {
+                        ++pos;
+                    }
                     if (pos >= text.size() || text[pos] != '.') {
                         break;
                     }
@@ -581,6 +675,32 @@ std::string normalize_abbreviations(std::string_view text)
                 }
             }
             if (kpos == key.size()) {
+                const auto is_word_character = [](char32_t cp) {
+                    return is_uk(cp) || is_latin(cp) || (cp >= U'0' && cp <= U'9');
+                };
+                bool left_boundary = true;
+                if (i != 0) {
+                    auto previous = i - 1;
+                    while (previous > 0 && is_utf8_continuation(text[previous])) {
+                        --previous;
+                    }
+                    std::size_t previous_stop = previous + 1;
+                    left_boundary = !is_word_character(decode_one(text, previous, previous_stop));
+                }
+                std::size_t key_start_stop = 1;
+                const auto key_start = decode_one(key, 0, key_start_stop);
+                auto key_end_start = key.size() - 1;
+                while (key_end_start > 0 && is_utf8_continuation(key[key_end_start])) {
+                    --key_end_start;
+                }
+                std::size_t key_end_stop = key_end_start + 1;
+                const auto key_end = decode_one(key, key_end_start, key_end_stop);
+                std::size_t following_stop = pos + 1;
+                const auto following = pos < text.size() ? decode_one(text, pos, following_stop) : U'\0';
+                const bool right_boundary = !is_word_character(key_end) || !is_word_character(following);
+                if ((is_word_character(key_start) && !left_boundary) || !right_boundary) {
+                    continue;
+                }
                 out += abbreviation_map().at(compact_spaces_lower(std::string_view(text).substr(i, pos - i)));
                 if (key.ends_with('.') && pos == text.size()) {
                     out.push_back('.');

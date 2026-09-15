@@ -642,7 +642,8 @@ const std::regex& symbol_currency_suffix_re()
 
 const std::unordered_map<std::string, std::string>& cardinal_to_ordinal()
 {
-    static const std::unordered_map<std::string, std::string> map = {{"один", "перший"},
+    static const std::unordered_map<std::string, std::string> map = {{"нуль", "нульовий"},
+                                                                     {"один", "перший"},
                                                                      {"одна", "перший"},
                                                                      {"два", "другий"},
                                                                      {"дві", "другий"},

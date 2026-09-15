@@ -51,6 +51,8 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - CLI integration tests, expanded Python binding tests, and normalization idempotence coverage.
 - Full-sentence TTS golden tests with 56 cases across 28 normalization categories and an idempotence assertion for every
   sentence.
+- Corpus-derived regression tests for technical standards, Cyrillic model and chemical identifiers, engineering
+  dimensions, scientific notation, data-rate units, Roman-numeral collisions, and punctuation-adjacent ranges.
 
 ### Changed
 
@@ -115,5 +117,18 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `широти`/`довготи`, and governed coordinate bounds use the genitive case.
 - Native Windows normalization no longer exhausts the default executable stack while matching ordinal and Roman
   numeral expressions.
+- Technical standards such as `ISO 8512-1:1990`, `ISO/IEC 7812`, `ISO-8859-1`, `IEEE 802 .22`, and
+  `ДНАОП 0.00-1.32-01` now preserve component boundaries, leading zeroes, and valid UTF-8 without consuming a
+  following prose dash.
+- Cyrillic alphanumeric identifiers and dimensions such as `К145ІК512П`, `ВМ-23/25/27/32/1230`, `1-0-1000х630`,
+  and `1000 х 630 мм` now receive stable spoken readings instead of colliding with dates, ranges, or temperatures.
+- Scientific notation written as `1,76×10-19 Дж`, abbreviated month-year suffixes, zero ordinals, and spaced
+  abbreviation punctuation now normalize on the first pass and remain idempotent.
+- Spaced rate units, milliseconds, decibel-milliwatts, and cubic centimetres per hour are normalized as measurements;
+  a trailing `/ с.` is no longer reinterpreted as the address abbreviation for a village.
+- `DVI`, `DL`, and `CLI` are no longer treated as bare Roman numerals, while Roman numerals before `група` or
+  `групи` receive the appropriate feminine ordinal form.
+- Bare ranges before sentence punctuation, ranges following a punctuation dash, and English `P.`/`pp.` page ranges
+  now honor `RangeStyle.FromTo`.
 
 [0.4.0]: https://github.com/ThirdLetterC/normalize_uk-cpp/releases/tag/v0.4.0

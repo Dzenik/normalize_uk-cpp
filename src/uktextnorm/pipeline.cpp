@@ -294,7 +294,8 @@ std::string protect_opaque_markup(std::string text,
     });
 
     if (validate_dates) {
-        static const std::regex local_date(R"((^|[^\d.])(\d{1,2})[./-](\d{1,2})[./-](\d{2}|\d{4})(?![\d.]))");
+        static const std::regex local_date(
+            R"((^|[^\d./-])(\d{1,2})[./-](\d{1,2})[./-](\d{2}|\d{4})(?!\d)(?![./-]\d)(?!x\d)(?!X\d)(?!х\d)(?!Х\d)(?!×\d))");
         text = regex_sub(text, local_date, [&](const std::smatch& m) {
             if (preceded_by_classification_label(
                     std::string_view(text).substr(0, static_cast<std::size_t>(m.position(2))))) {
@@ -568,6 +569,7 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
         }
         text = normalize_number_groups(std::move(text), options.parse_thousand_separators);
         text = normalize_identifiers(std::move(text));
+        text = normalize_cyrillic_alphanumeric(std::move(text));
         text = normalize_text_with_phone_numbers(std::move(text), options.phone_style);
         text = normalize_scientific(std::move(text));
         text = normalize_dates(std::move(text),

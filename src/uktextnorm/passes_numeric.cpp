@@ -21,7 +21,7 @@ const std::string& range_separator_pattern()
 
 const std::string& range_prefix_pattern()
 {
-    static const std::string pattern = R"((^|[\s(\[{:;,.!?=]))";
+    static const std::string pattern = R"((^|[\s(\[{:;,.!?=]|(?:[-–—]\s+)))";
     return pattern;
 }
 
@@ -543,12 +543,12 @@ std::string normalize_dates(
         const auto out = ordered_date_words(m[1].str(), m[2].str(), m[3].str());
         return out ? *out : m.str();
     });
-    static const std::regex dmy_short_slash(R"(\b(\d{1,2})/(\d{1,2})/(\d{2})\b(?:\s+(?:року|р\.))?)");
+    static const std::regex dmy_short_slash(R"(\b(\d{1,2})/(\d{1,2})/(\d{2})\b(?!/\d)(?:\s+(?:року|р\.))?)");
     text = regex_sub(text, dmy_short_slash, [&](const std::smatch& m) {
         const auto out = ordered_date_words(m[1].str(), m[2].str(), m[3].str());
         return out ? *out : m.str();
     });
-    static const std::regex ymd_slash(R"(\b(\d{4})/(\d{1,2})/(\d{1,2})\b(?:\s+(?:року|р\.))?)");
+    static const std::regex ymd_slash(R"(\b(\d{4})/(\d{1,2})/(\d{1,2})\b(?!/\d)(?:\s+(?:року|р\.))?)");
     text = regex_sub(text, ymd_slash, [&](const std::smatch& m) {
         const auto out = full_date_words(m[3].str(), m[2].str(), m[1].str());
         return out ? *out : m.str();
@@ -557,7 +557,7 @@ std::string normalize_dates(
         const auto out = ordered_date_words(cap<1>(m), cap<2>(m), cap<3>(m));
         return out ? *out : whole_string(m);
     });
-    text = ctre_sub<R"(\b(\d{1,2})/(\d{1,2})/(\d{4})\b(?:\s+(?:року|р\.))?)">(text, [&](const auto& m) {
+    text = ctre_sub<R"(\b(\d{1,2})/(\d{1,2})/(\d{4})\b(?!/\d)(?:\s+(?:року|р\.))?)">(text, [&](const auto& m) {
         const auto out = ordered_date_words(cap<1>(m), cap<2>(m), cap<3>(m));
         return out ? *out : whole_string(m);
     });
@@ -618,7 +618,7 @@ std::string normalize_dates(
         return number_to_ordinal_words(day, "gen") + " " + month_name(m[2].str());
     });
     static const std::regex named_month_year("(^|[^А-Яа-яЄєІіЇїҐґ])(" + month_any +
-                                                 R"()\s+(\d{4})(?:\s+року(?![А-Яа-яЄєІіЇїҐґ]))?(?!\d))",
+                                                 R"()\s+(\d{4})(?:\s+(?:року|р\.)(?![А-Яа-яЄєІіЇїҐґ]))?(?!\d))",
                                              std::regex::icase);
     text = regex_sub(text, named_month_year, [&](const std::smatch& m) {
         static const std::unordered_set<std::string> genitive_months = {"січня",
@@ -722,7 +722,7 @@ std::string normalize_ordinals(std::string text)
                                                                                   {"ій", "loc_f"},
                                                                                   {"ими", "ins_pl"}};
     static const std::unordered_set<std::string> stop = {
-        "CD", "DVD", "MD", "DC", "MC", "MI", "MM", "DI", "DIV", "MIX", "CIV", "LCD"};
+        "CD", "DVD", "MD", "DC", "MC", "MI", "MM", "DI", "DIV", "DVI", "DL", "CLI", "MIX", "CIV", "LCD"};
     // Keep these patterns in std::regex rather than CTRE. The CTRE expansion
     // for these UTF-8 lookahead/alternation expressions has high runtime stack
     // usage; on the default 1 MiB Windows executable stack even a short input
@@ -760,6 +760,16 @@ std::string normalize_ordinals(std::string text)
             return m.str();
         }
         return m[1].str() + number_to_ordinal_words(roman_to_int(tok), "nom_n") + " століття";
+    });
+    static const std::regex roman_group(R"((^|[^A-Za-z])([MDCLXVI]{1,6})\s+(група|групи)(?![А-Яа-яЄєІіЇїҐґ]))",
+                                        std::regex::icase);
+    text = regex_sub(text, roman_group, [](const std::smatch& m) {
+        const auto token = m[2].str();
+        if (!valid_roman(token)) {
+            return m.str();
+        }
+        const auto form = lower_text(m[3].str()) == "групи" ? "gen_f" : "nom_f";
+        return m[1].str() + number_to_ordinal_words(roman_to_int(token), form) + " " + m[3].str();
     });
     static const std::regex bare_roman(R"(\b[MDCLXVI]{2,}\b)");
     return regex_sub(text, bare_roman, [&](const std::smatch& m) {
@@ -818,7 +828,8 @@ std::string normalize_page_ranges(std::string text, RangeStyle style)
                plural(count, {"сторінка", "сторінки", "сторінок"}) + (m.suffix().str().empty() ? "." : "");
     });
     static const std::regex page_range(
-        R"((^|[^А-Яа-яЄєІіЇїҐґA-Za-z])(?:стор\.|Стор\.|СТОР\.|с\.|С\.)\s*(\d+)\s*(?:-|−|–|—)\s*(\d+)(?!\d))");
+        R"((^|[^А-Яа-яЄєІіЇїҐґA-Za-z])(?:стор\.|Стор\.|СТОР\.|с\.|С\.|pp?\.)\s*(\d+)\s*(?:-|−|–|—)\s*(\d+)(?!\d))",
+        std::regex::icase);
     text = regex_sub(text, page_range, [&](const std::smatch& m) {
         const auto low = try_parse_ull(m[2].str());
         const auto high = try_parse_ull(m[3].str());
@@ -831,7 +842,8 @@ std::string normalize_page_ranges(std::string text, RangeStyle style)
         }
         return m[1].str() + "сторінки " + number_to_words(*low) + " " + number_to_words(*high);
     });
-    static const std::regex single_page(R"((^|[^А-Яа-яЄєІіЇїҐґA-Za-z])(?:стор|Стор|СТОР|с|С)\.\s*(\d+)(?!\d))");
+    static const std::regex single_page(R"((^|[^А-Яа-яЄєІіЇїҐґA-Za-z])(?:стор|Стор|СТОР|с|С|pp?)\.\s*(\d+)(?!\d))",
+                                        std::regex::icase);
     return regex_sub(text, single_page, [](const std::smatch& m) {
         return m[1].str() + "сторінка " + number_to_words(parse_ull(m[2].str()));
     });
@@ -892,7 +904,7 @@ std::string normalize_ranges(std::string text, RangeStyle style)
     const auto& separator = range_separator_pattern();
     const auto& prefix = range_prefix_pattern();
     const auto& temperature_unit = temperature_unit_pattern();
-    static const std::string number_boundary = R"((?![\d.,:/+\-−–—]))";
+    static const std::string number_boundary = R"((?![\d:/+\-−–—])(?![.,]\d))";
     static const std::string temperature_boundary = number_boundary + R"((?![A-Za-zА-Яа-яЄєІіЇїҐґ]))";
 
     auto temperature_bound = [](std::string_view token, const TemperatureScale& scale, bool genitive) {
@@ -1854,11 +1866,39 @@ std::string normalize_scientific(std::string text)
                    ? std::optional<std::string>(*base_words + " помножити на десять у степені " + *exponent_text)
                    : std::nullopt;
     };
+    auto scientific_unit = [](std::string_view quantity, const std::ssub_match& unit) {
+        if (!unit.matched) {
+            return std::string{};
+        }
+        const auto measurement = measurements().find(unit.str());
+        if (measurement == measurements().end()) {
+            return std::string{};
+        }
+        if (!quantity.empty() && (quantity.front() == '+' || quantity.front() == '-')) {
+            quantity.remove_prefix(1);
+        }
+        if (quantity.find_first_of(".,") != std::string_view::npos) {
+            return " " + std::string(measurement->second.decimal);
+        }
+        const auto value = try_parse_ull(quantity);
+        return value
+                   ? " " + plural(*value, {measurement->second.one, measurement->second.few, measurement->second.many})
+                   : std::string{};
+    };
+    static const std::string unit_suffix = "(?:\\s*(" + unit_alt() + "))?(?![A-Za-zА-Яа-яЄєІіЇїҐґ])";
     static const std::regex times_ten(
-        R"((^|[^A-Za-zА-Яа-яЄєІіЇїҐґ\d.,])([+-]?\d+(?:[.,]\d+)?)\s*(?:×|·|x|X|\*)\s*10\s*\^\s*([+-]?\d+)(?!\d))");
+        R"((^|[^A-Za-zА-Яа-яЄєІіЇїҐґ\d.,])([+-]?\d+(?:[.,]\d+)?)\s*(?:×|·|x|X|\*)\s*10\s*\^\s*([+-]?\d+)(?!\d))" +
+        unit_suffix);
     text = regex_sub(text, times_ten, [&](const std::smatch& m) {
         const auto words = scientific_words(m[2].str(), m[3].str());
-        return words ? m[1].str() + *words : m.str();
+        return words ? m[1].str() + *words + scientific_unit(m[2].str(), m[4]) : m.str();
+    });
+    static const std::regex times_ten_plain_signed_exponent(
+        R"((^|[^A-Za-zА-Яа-яЄєІіЇїҐґ\d.,])([+-]?\d+(?:[.,]\d+)?)\s*(?:×|·|x|X|\*)\s*10\s*([+-]\d+)(?!\d))" +
+        unit_suffix);
+    text = regex_sub(text, times_ten_plain_signed_exponent, [&](const std::smatch& m) {
+        const auto words = scientific_words(m[2].str(), m[3].str());
+        return words ? m[1].str() + *words + scientific_unit(m[2].str(), m[4]) : m.str();
     });
     static const std::regex e_notation(
         R"((^|[^A-Za-zА-Яа-яЄєІіЇїҐґ\d.,])([+-]?\d+(?:[.,]\d+)?)[eE]([+-]?\d+)(?![A-Za-zА-Яа-яЄєІіЇїҐґ\d]))");

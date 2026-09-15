@@ -204,6 +204,7 @@ std::string normalize_identifiers(std::string text);
 std::string normalize_versions(std::string text);
 std::string normalize_negatives(std::string text);
 std::string normalize_text_with_numbers(std::string text);
+std::string normalize_cyrillic_alphanumeric(std::string text);
 std::string normalize_technical_alphanumeric(std::string text);
 std::string normalize_english(std::string text);
 

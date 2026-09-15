@@ -509,6 +509,10 @@ int main(int argc, char** argv)
               normalize_ukrainian("від 5 грн до 7 грн", range_options),
               "від п'яти до семи гривень");
     expect_eq("bare number range", normalize_ukrainian("5–7", range_options), "від п'яти до семи");
+    expect_eq("terminal bare number range", normalize_ukrainian("5–7.", range_options), "від п'яти до семи.");
+    expect_eq("range after punctuation dash",
+              normalize_ukrainian("У Європі — 300—330, 380—400 кВ.", range_options),
+              "У Європі — від трьохсот до трьохсот тридцяти, від трьохсот вісімдесяти до чотирьохсот кіловольт.");
     expect_eq("time range",
               normalize_ukrainian("10:30–12:45", range_options),
               "від десятої години тридцяти хвилин до дванадцятої години сорока п'яти хвилин");
@@ -516,6 +520,9 @@ int main(int argc, char** argv)
     expect_eq("page range", normalize_ukrainian("стор. 5–7", range_options), "від п'ятої до сьомої сторінки");
     expect_eq("short page range", normalize_ukrainian("с. 5–7", range_options), "від п'ятої до сьомої сторінки");
     expect_eq("uppercase page range", normalize_ukrainian("Стор. 5—7", range_options), "від п'ятої до сьомої сторінки");
+    expect_eq("English bibliographic page range",
+              normalize_ukrainian("P. 1227–1246.", range_options),
+              "від тисяча двісті двадцять сьомої до тисяча двісті сорок шостої сторінки.");
     expect_eq("legal article range", normalize_ukrainian("ст. 5–7", range_options), "від п'ятої до сьомої статті");
     expect_eq("legal point range", normalize_ukrainian("п. 2-4", range_options), "від другого до четвертого пункту");
     expect_eq("year month", normalize_ukrainian("2026-09", range_options), "вересень дві тисячі двадцять шостого року");
@@ -1034,6 +1041,56 @@ int main(int argc, char** argv)
     expect_eq("numeric construction standard",
               normalize_ukrainian("ГОСТ 16483.17–81", audit_options),
               "ГОСТ шістнадцять тисяч чотириста вісімдесят три крапка сімнадцять дефіс вісімдесят один");
+    const auto corpus_standards = normalize_ukrainian(
+        "IEEE 802 .22; ISO 8512-1:1990; ДСТУ ISO 80000-1:2016; ISO / IEC 7812; ISO-8859-1; ДНАОП 0.00-1.32-01.",
+        audit_options);
+    expect_eq(
+        "Wikipedia technical standards",
+        corpus_standards,
+        "ай і і і вісімсот два крапка двадцять два; ай ес оу вісім тисяч п'ятсот дванадцять дефіс один двокрапка "
+        "тисяча дев'ятсот дев'яносто; ДСТУ ай ес оу вісімдесят тисяч дефіс один двокрапка дві тисячі шістнадцять; ай "
+        "ес оу слеш ай і сі сім тисяч вісімсот дванадцять; ай ес оу дефіс вісім тисяч вісімсот п'ятдесят дев'ять дефіс "
+        "один; ДНАОП нуль крапка нуль нуль дефіс один крапка тридцять два дефіс нуль один.");
+    expect_eq(
+        "technical standards are idempotent", normalize_ukrainian(corpus_standards, audit_options), corpus_standards);
+    expect_eq("standard delimiter does not consume prose",
+              normalize_ukrainian("IEC 61970/61968 — загальна модель.", audit_options),
+              "ай і сі шістдесят одна тисяча дев'ятсот сімдесят слеш шістдесят одна тисяча дев'ятсот шістдесят вісім — "
+              "загальна модель.");
+    expect_eq("Cyrillic technical identifiers",
+              normalize_ukrainian("К145ІК512П; АТ1; О2; СО2; ТіО2; 38С2; Р-405м; БІО-100.", audit_options),
+              "ка сто сорок п'ять і ка п'ятсот дванадцять пе; а те один; о два; ес о два; те і о два; тридцять вісім "
+              "ес два; ер дефіс чотириста п'ять ем; бе і о дефіс сто.");
+    expect_eq("compound Cyrillic technical codes",
+              normalize_ukrainian("Плита 1-0-1000х630; ВМ-23/25/27/32/1230.", audit_options),
+              "Плита один дефіс нуль дефіс тисяча помножити на шістсот тридцять; ве ем дефіс двадцять три слеш "
+              "двадцять п'ять слеш двадцять сім слеш тридцять два слеш тисяча двісті тридцять.");
+    expect_eq("spaced Cyrillic dimensions",
+              normalize_ukrainian("розмірами 1000 х 630 мм", audit_options),
+              "розмірами тисяча помножити на шістсот тридцять міліметрів");
+    expect_eq("scientific notation without caret and with unit",
+              normalize_ukrainian("1,76× 10-19 Дж", audit_options),
+              "одна ціла і сімдесят шість сотих помножити на десять у степені мінус дев'ятнадцять джоуля");
+    expect_eq("named month consumes abbreviated year suffix",
+              normalize_ukrainian("У липні 2011 р.", audit_options),
+              "У липні дві тисячі одинадцятого року");
+    expect_eq("zero ordinal", normalize_ukrainian("0-го класу", audit_options), "нульового класу");
+    expect_eq("spaced abbreviation punctuation",
+              normalize_ukrainian("і т.д .; Corp. створено", audit_options),
+              "і так далі; корп. створено");
+    const auto foreign_slash = normalize_ukrainian("Index locorum / Seznam krajev", audit_options);
+    expect_eq("foreign slash spacing", foreign_slash, "індекс локорум/сезнам краджев");
+    expect_eq("foreign slash spacing is idempotent", normalize_ukrainian(foreign_slash, audit_options), foreign_slash);
+    expect_eq("abbreviation boundaries inside identifiers",
+              normalize_ukrainian("ІЕР-01 і КР-005", audit_options),
+              "і е ер дефіс нуль один і ка ер дефіс нуль нуль п'ять");
+    expect_eq("spaced rate units",
+              normalize_ukrainian("Швидкість 18 Мбіт / с. Затримка 160 мс; сигнал −116 дБм.", audit_options),
+              "Швидкість вісімнадцять мегабітів за секунду. Затримка сто шістдесят мілісекунд; сигнал мінус сто "
+              "шістнадцять децибел-міліват.");
+    expect_eq("technical acronyms are not Roman numerals",
+              normalize_ukrainian("Підфрейм DL, інтерфейс DVI та елемент III групи.", audit_options),
+              "Підфрейм ді ел, інтерфейс ді ві ай та елемент третьої групи.");
     expect_eq("dotted standard with letter suffix",
               normalize_ukrainian("Wi-Fi 6 (802.11ax)", audit_options),
               "ві-фі шість (вісімсот два крапка одинадцять ей екс)");
