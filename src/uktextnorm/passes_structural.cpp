@@ -248,6 +248,14 @@ std::string normalize_unicode(std::string text, QuoteStyle quote_style)
         }
         // Canonicalize visually equivalent mathematical signs and dash-like range
         // separators before any byte-oriented regular expressions see them.
+        // The tightly joined technical notation 10−n is a power of ten.
+        // Keep this particular mathematical minus until the scientific pass;
+        // other minus signs still follow the ordinary signed/range rules.
+        if (cp == U'−' && idx >= 2 && cps[idx - 2].value == U'1' && prev == U'0' &&
+            (idx == 2 || cps[idx - 3].value < U'0' || cps[idx - 3].value > U'9') && next >= U'0' && next <= U'9') {
+            append_utf8(out, cp);
+            continue;
+        }
         if (cp == U'−' || cp == U'－') {
             out.push_back('-');
             continue;

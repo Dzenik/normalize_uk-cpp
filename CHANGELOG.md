@@ -7,8 +7,22 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-15
+
 ### Fixed
 
+- Contextual ranges after `до`, `на`, `в`/`у`, and `близько` no longer insert an incompatible `від`; abbreviated
+  year and decade ranges now expand the omitted century instead of reading the second bound as a bare number;
+  date ranges after a preposition and day ranges without a year now have natural spoken forms. Prepositions are
+  matched as whole words, and school-grade ranges use ordinals without changing ordinary counts of classes.
+- Tightly joined scientific powers such as `10−9` and `10−15—10−12` no longer turn into numeric ranges, while
+  ordinary hyphen ranges retain their existing reading; adjacent `ρh` variables and inverse Celsius powers no
+  longer interrupt the scientific reading.
+- Cyrillic Roman-century glyphs such as `ХХ` and `ХХІ`, capitalized Ukrainian month names in dates, and ordinal
+  class labels such as `1 класу` now receive context-appropriate spoken forms.
+- Regional currency prefixes such as `US$` are resolved before multiplier normalization; unambiguous slash dates
+  in month/day order are recognized when day/month order is impossible, while ambiguous dates keep the selected policy.
+- Biblical chapter-and-verse references are read before invalid-clock protection and clock normalization.
 - Bare IEEE 802 revisions, including letter suffixes and year-like revisions, are read as identifiers rather than
   decimals, measurement units, malformed scientific notation, or numeric ranges.
 - Dissertation speciality codes after a `... наук:` label are read as dotted codes rather than invalid dates.
@@ -152,4 +166,5 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Bare ranges before sentence punctuation, ranges following a punctuation dash, and English `P.`/`pp.` page ranges
   now honor `RangeStyle.FromTo`.
 
+[0.4.1]: https://github.com/ThirdLetterC/normalize_uk-cpp/releases/tag/v0.4.1
 [0.4.0]: https://github.com/ThirdLetterC/normalize_uk-cpp/releases/tag/v0.4.0

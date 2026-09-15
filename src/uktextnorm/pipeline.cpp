@@ -209,6 +209,9 @@ std::string protect_opaque_markup(std::string text,
         return !has_component || token.ends_with('T') || token.ends_with('t') ? protect(token) : token;
     });
 
+    if (text.contains(':')) {
+        text = normalize_biblical_references(std::move(text));
+    }
     static const std::regex invalid_clock_candidate(R"((^|[^\d:])(\d{1,3}):(\d{2})(?::(\d{2}))?(?![\d:]))");
     text = regex_sub(text, invalid_clock_candidate, [&](const std::smatch& m) {
         const auto invalid = parse_int(m[2].str()) > 24 ||
@@ -320,7 +323,9 @@ std::string protect_opaque_markup(std::string text,
                 m[4].length() == 2 ? (short_year < 50 ? 2000 + short_year : 1900 + short_year) : short_year;
             const auto month_first =
                 numeric_date_order == NumericDateOrder::MonthDayYear ||
-                (numeric_date_order == NumericDateOrder::PreserveAmbiguous && first <= 12 && second > 12);
+                (first <= 12 && second > 12 &&
+                 (numeric_date_order == NumericDateOrder::PreserveAmbiguous ||
+                  (numeric_date_order == NumericDateOrder::DayMonthYear && m.str().contains('/'))));
             const auto day = month_first ? second : first;
             const auto month = month_first ? first : second;
             return is_valid_date(day, month, year)
@@ -533,6 +538,23 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
 
     text = normalize_unicode(std::move(text), options.quote_style);
     text = normalize_typography(std::move(text));
+    // Isolated mathematical variables must not pass through Latin/Cyrillic
+    // homoglyph repair (ρh would otherwise become the unreadable ρг).
+    if (text.contains("ρh")) {
+        replace_all(text, "ρh", " ро аш");
+    }
+    if (text.contains("з α =")) {
+        replace_all(text, "з α =", "з альфою, що дорівнює");
+    }
+    if (text.contains("З α =")) {
+        replace_all(text, "З α =", "З альфою, що дорівнює");
+    }
+    if (text.contains("α =")) {
+        replace_all(text, "α =", "альфа =");
+    }
+    if (text.contains('$') || text.contains("¥")) {
+        text = normalize_regional_currency_aliases(std::move(text));
+    }
     if (text.contains("==")) {
         text = strip_mediawiki_heading_markup(std::move(text));
     }
@@ -597,7 +619,7 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
         text = normalize_identifiers(std::move(text));
         text = normalize_cyrillic_alphanumeric(std::move(text));
         text = normalize_text_with_phone_numbers(std::move(text), options.phone_style);
-        text = normalize_scientific(std::move(text));
+        text = normalize_scientific(std::move(text), options.range_style);
         text = normalize_dates(std::move(text),
                                options.date_style,
                                options.validate_dates,
@@ -641,7 +663,7 @@ std::string normalize_ukrainian(std::string_view input, const NormalizeOptions& 
             text = normalize_multipliers(std::move(text));
         }
         text = normalize_measurements(std::move(text));
-    } else if (maybe_roman()) {
+    } else if (maybe_roman() || text.contains("ХХ") || text.contains("ХІ") || text.contains("ІХ")) {
         text = normalize_ordinals(std::move(text));
     }
     if (!maybe_digits() && contains_any(text, "½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅐⅛⅜⅝⅞⅑⅒")) {

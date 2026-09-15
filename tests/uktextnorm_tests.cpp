@@ -1021,6 +1021,90 @@ int main(int argc, char** argv)
                               uktextnorm::UncertaintySeverity::Warning);
 
     const auto audit_options = uktextnorm::options_for_preset(uktextnorm::NormalizePreset::TtsFriendly);
+    expect_eq("technical power with Unicode minus",
+              normalize_ukrainian("10−9 м", audit_options),
+              "десять у степені мінус дев'ять метрів");
+    expect_eq("technical power with a multiplier",
+              normalize_ukrainian("2x10−6 м", audit_options),
+              "два помножити на десять у степені мінус шість метри");
+    expect_eq("range of technical powers",
+              normalize_ukrainian("10−15—10−12 секунди", audit_options),
+              "від десяти у степені мінус п'ятнадцять до десяти у степені мінус дванадцять секунд");
+    const auto greek_power = normalize_ukrainian("−0,0419·10−3ρh", audit_options);
+    expect_eq("power next to a Greek variable",
+              greek_power,
+              "мінус нуль цілих і чотириста дев'ятнадцять десятитисячних помножити на десять у степені мінус три ро "
+              "аш");
+    expect_eq("Greek-variable power is idempotent", normalize_ukrainian(greek_power, audit_options), greek_power);
+    expect_eq("inverse Celsius scientific unit",
+              normalize_ukrainian("0,6 × 10−6°C−1", audit_options),
+              "нуль цілих і шість десятих помножити на десять у степені мінус шість на градус Цельсія");
+    expect_eq("Greek coefficient with an inverse unit",
+              normalize_ukrainian("з α = 0,6 × 10−6°C−1", audit_options),
+              "з альфою, що дорівнює нуль цілих і шість десятих помножити на десять у степені мінус шість на градус "
+              "Цельсія");
+    expect_eq("ordinary hyphen still denotes a range",
+              normalize_ukrainian("10-12 м", audit_options),
+              "від десяти до дванадцяти метрів");
+    expect_eq("Cyrillic Roman century", normalize_ukrainian("У ХХ ст.", audit_options), "У двадцятому столітті");
+    expect_eq("Cyrillic Roman century after a genitive cue",
+              normalize_ukrainian("до початку ХХІ століття", audit_options),
+              "до початку двадцять першого століття");
+    expect_eq("Cyrillic Roman century range",
+              normalize_ukrainian("В Х—ХІ ст.", audit_options),
+              "В десятому–одинадцятому століттях");
+    expect_eq("inflected Cyrillic Roman century",
+              normalize_ukrainian("У ХХІ столітті", audit_options),
+              "У двадцять першому столітті");
+    expect_eq("capitalized month in a full date",
+              normalize_ukrainian("12 Січня 2013", audit_options),
+              "дванадцятого січня дві тисячі тринадцятого року");
+    expect_eq("unambiguous US slash date",
+              normalize_ukrainian("04/29/02", audit_options),
+              "двадцять дев'ятого квітня дві тисячі другого року");
+    expect_eq("ambiguous slash date keeps local order",
+              normalize_ukrainian("04/05/02", audit_options),
+              "четвертого травня дві тисячі другого року");
+    expect_eq("genitive ordinal class", normalize_ukrainian("мережа 1 класу", audit_options), "мережа першого класу");
+    expect_eq("regional dollar with multiplier",
+              normalize_ukrainian("US$2,9 трлн", audit_options),
+              "дві цілих і дев'ять десятих трильйона доларів");
+    expect_eq("range after to", normalize_ukrainian("до 7-8 доларів", audit_options), "до семи–восьми доларів");
+    expect_eq(
+        "range after from", normalize_ukrainian("від 100…200 °С", audit_options), "від ста–двохсот градусів Цельсія");
+    expect_eq("range after on", normalize_ukrainian("на 60-80%", audit_options), "на шістдесят–вісімдесят відсотків");
+    expect_eq("range after near",
+              normalize_ukrainian("близько 10%-15%", audit_options),
+              "близько десяти–п'ятнадцяти відсотків");
+    expect_eq("range after in", normalize_ukrainian("в 2—3 лінії", audit_options), "в дві–три лінії");
+    expect_eq("range of school grades in locative",
+              normalize_ukrainian("в 9-10 класах", audit_options),
+              "в дев'ятих–десятих класах");
+    expect_eq("school grades after pupils are ordinal",
+              normalize_ukrainian("Довідник для учнів 9-11 класів", audit_options),
+              "Довідник для учнів дев'ятих–одинадцятих класів");
+    expect_eq("a count of classes remains cardinal",
+              normalize_ukrainian("Школа має 9-11 класів", audit_options),
+              "Школа має від дев'яти до одинадцяти класів");
+    expect_eq("abbreviated year range",
+              normalize_ukrainian("У 1946–47 роках", audit_options),
+              "У період від тисяча дев'ятсот сорок шостого до тисяча дев'ятсот сорок сьомого року");
+    expect_eq("abbreviated decade range",
+              normalize_ukrainian("1970-80-х роках", audit_options),
+              "сімдесятих–вісімдесятих роках двадцятого століття");
+    expect_eq("year range after on",
+              normalize_ukrainian("на 2007—2010 роки", audit_options),
+              "на період від дві тисячі сьомого до дві тисячі десятого року");
+    expect_eq("date range after on",
+              normalize_ukrainian("планували на 21-24 вересня 2020 р.", audit_options),
+              "планували на період від двадцять першого до двадцять четвертого вересня дві тисячі двадцятого року");
+    expect_eq("date range without a year",
+              normalize_ukrainian("планували на 21-24 вересня", audit_options),
+              "планували на період від двадцять першого до двадцять четвертого вересня");
+    expect_eq("Bible chapter and verse do not become clock times",
+              normalize_ukrainian("(Ісая 40:22, 40:28, 41:9)", audit_options),
+              "(Ісая розділ сорок, вірш двадцять два, розділ сорок, вірш двадцять вісім, розділ сорок один, вірш "
+              "дев'ять)");
     expect_eq("unicode minus fraction", normalize_ukrainian("−1/2", audit_options), "мінус одна друга");
     expect_eq("signed compound measurement",
               normalize_ukrainian("-2,5 м/с²", audit_options),

@@ -88,6 +88,23 @@ std::string normalize_symbol_currency(std::string text)
         return m[1].str() + " " + m[2].str() + " " + genpl.at(m[3].str());
     });
 }
+std::string normalize_regional_currency_aliases(std::string text)
+{
+    static const std::unordered_map<std::string, std::string_view> regional_aliases = {{"us$", "USD"},
+                                                                                       {"ca$", "CAD"},
+                                                                                       {"au$", "AUD"},
+                                                                                       {"nz$", "NZD"},
+                                                                                       {"hk$", "HKD"},
+                                                                                       {"sg$", "SGD"},
+                                                                                       {"jp¥", "JPY"},
+                                                                                       {"cn¥", "CNY"},
+                                                                                       {"r$", "BRL"}};
+    static const std::regex regional_alias(R"((US\$|CA\$|AU\$|NZ\$|HK\$|SG\$|JP¥|CN¥|R\$))", std::regex::icase);
+    return regex_sub(text, regional_alias, [](const std::smatch& m) {
+        return std::string(regional_aliases.at(lower_text(m.str())));
+    });
+}
+
 std::string normalize_currency(std::string text)
 {
     struct Currency {
@@ -101,19 +118,7 @@ std::string normalize_currency(std::string text)
     static constexpr std::string_view amount_token =
         R"([+-]?(?:[1-9]\d{0,2}(?:,\d{3})+(?:\.\d{1,4})?|[1-9]\d{0,2}(?:\.\d{3})+(?:,\d{1,4})?|\d+[.,]\d{1,4}|\d+|[.,]\d{1,4})(?!\d|[.,]\d))";
     static const std::string amount = "(" + std::string(amount_token) + ")";
-    static const std::unordered_map<std::string, std::string_view> regional_aliases = {{"us$", "USD"},
-                                                                                       {"ca$", "CAD"},
-                                                                                       {"au$", "AUD"},
-                                                                                       {"nz$", "NZD"},
-                                                                                       {"hk$", "HKD"},
-                                                                                       {"sg$", "SGD"},
-                                                                                       {"jp¥", "JPY"},
-                                                                                       {"cn¥", "CNY"},
-                                                                                       {"r$", "BRL"}};
-    static const std::regex regional_alias(R"((US\$|CA\$|AU\$|NZ\$|HK\$|SG\$|JP¥|CN¥|R\$))", std::regex::icase);
-    text = regex_sub(text, regional_alias, [](const std::smatch& m) {
-        return std::string(regional_aliases.at(lower_text(m.str())));
-    });
+    text = normalize_regional_currency_aliases(std::move(text));
     static const std::regex signed_prefix("([+-])\\s*(" + currency_token_alt() + ")\\s*(?=\\d)", std::regex::icase);
     text = regex_sub(text, signed_prefix, [](const std::smatch& m) { return m[2].str() + m[1].str(); });
     static const std::regex accounting_prefix("\\((" + currency_token_alt() + ")\\s*(\\d+(?:[.,]\\d{1,4})?)\\)",
