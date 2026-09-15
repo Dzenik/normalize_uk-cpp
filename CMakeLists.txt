@@ -8,7 +8,15 @@ project(
 )
 
 if(MSVC)
-    add_compile_options(/utf-8 /templateDepth:2048)
+    add_compile_options(/utf-8)
+endif()
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+        add_compile_options(/clang:-ftemplate-depth=2048)
+    else()
+        add_compile_options(-ftemplate-depth=2048)
+    endif()
 endif()
 
 include(GNUInstallDirs)
