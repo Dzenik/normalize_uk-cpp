@@ -100,6 +100,18 @@ but issue `DeprecationWarning`; use `split_sentences()` and
 
 ## Custom vocabulary
 
+Pass a Python dict directly when no file is needed:
+
+```python
+words = {"Acme": "акме", "Google": "гуголь"}
+print(nuk.normalize_ukrainian("Google і Acme", vocabulary=words))  # гуголь і акме
+```
+
+`normalize_ukrainian_many()` and `flag_uncertain()` accept the same
+`vocabulary=` keyword. A dict can also be the second positional argument.
+When passed alongside `options=`, its entries override matching words for that
+call while leaving the options object unchanged.
+
 Save user-supplied word readings as a UTF-8 TSV file with the same columns as
 `data/lexicons/brands.tsv` and `data/lexicons/english_words.tsv`:
 

@@ -295,6 +295,21 @@ class NormalizeUkBindingTests(unittest.TestCase):
         self.assertEqual(
             nuk.normalize_ukrainian("Google і Acme", options), "гуголь і акме"
         )
+        self.assertEqual(
+            nuk.normalize_ukrainian("Google і Acme", vocabulary=words),
+            "гуголь і акме",
+        )
+        self.assertEqual(
+            nuk.normalize_ukrainian("Google і Acme", words), "гуголь і акме"
+        )
+        self.assertEqual(
+            nuk.normalize_ukrainian(
+                "Google і Acme",
+                preset=nuk.NormalizePreset.TtsFriendly,
+                vocabulary=words,
+            ),
+            "гуголь і акме",
+        )
         self.assertEqual(nuk.normalize_ukrainian("Google"), "гугл")
         disabled = nuk.NormalizeOptions(
             vocabulary=words, normalize_english_words=False, transliterate_latin=False
@@ -306,10 +321,28 @@ class NormalizeUkBindingTests(unittest.TestCase):
             nuk.normalize_ukrainian_many(["Acme", "Google"], options),
             ["акме", "гуголь"],
         )
+        self.assertEqual(
+            nuk.normalize_ukrainian_many(["Acme", "Google"], vocabulary=words),
+            ["акме", "гуголь"],
+        )
+        merged = nuk.NormalizeOptions(vocabulary={"acme": "старе", "other": "інше"})
+        self.assertEqual(
+            nuk.normalize_ukrainian(
+                "Acme і Other", options=merged, vocabulary={"Acme": "акме"}
+            ),
+            "акме і інше",
+        )
+        self.assertEqual(merged.vocabulary, {"acme": "старе", "other": "інше"})
         self.assertFalse(
             any(
                 span.category == nuk.UncertaintyCategory.ForeignWord
                 for span in nuk.flag_uncertain("Acme", options=options)
+            )
+        )
+        self.assertFalse(
+            any(
+                span.category == nuk.UncertaintyCategory.ForeignWord
+                for span in nuk.flag_uncertain("Acme", vocabulary=words)
             )
         )
         for clone in (copy.copy(options), pickle.loads(pickle.dumps(options))):
@@ -320,6 +353,8 @@ class NormalizeUkBindingTests(unittest.TestCase):
             nuk.NormalizeOptions(vocabulary={"Acme": "акме", "acme": "інше"})
         with self.assertRaises(TypeError):
             cast(Any, nuk.NormalizeOptions)(vocabulary={"acme": 1})
+        with self.assertRaises(TypeError):
+            cast(Any, nuk.normalize_ukrainian)("Acme", vocabulary=["acme"])
         with tempfile.TemporaryDirectory() as directory:
             invalid_path = Path(directory) / "duplicates.tsv"
             invalid_path.write_text(

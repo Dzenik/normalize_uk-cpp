@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import warnings as _warnings
 from collections.abc import Iterable
+from copy import copy as _copy
 
 from ._normalize_uk import (
     ColonStyle,
@@ -164,9 +165,15 @@ def number_to_words_case(n: int, grammatical_case: str) -> str:
 
 
 def _selection(
-    options: NormalizeOptions | NormalizePreset | None,
+    options: NormalizeOptions | NormalizePreset | dict[str, str] | None,
     preset: NormalizePreset | None,
 ) -> NormalizeOptions | NormalizePreset | None:
+    if isinstance(options, dict):
+        if preset is not None:
+            raise ValueError(
+                "provide either a positional vocabulary or preset, not both"
+            )
+        return NormalizeOptions(vocabulary=options)
     if isinstance(options, NormalizePreset):
         if preset is not None:
             raise ValueError("provide either options or preset, not both")
@@ -184,14 +191,34 @@ def _selection(
     return None
 
 
+def _with_vocabulary(
+    selected: NormalizeOptions | NormalizePreset | None,
+    vocabulary: dict[str, str] | None,
+) -> NormalizeOptions | NormalizePreset | None:
+    if vocabulary is None:
+        return selected
+    added = NormalizeOptions(vocabulary=vocabulary).vocabulary
+    if selected is None:
+        snapshot = NormalizeOptions()
+    elif isinstance(selected, NormalizePreset):
+        snapshot = options_for_preset(selected)
+    else:
+        snapshot = _copy(selected)
+    combined = snapshot.vocabulary
+    combined.update(added)
+    snapshot.vocabulary = combined
+    return snapshot
+
+
 def normalize_ukrainian(
     text: str,
-    options: NormalizeOptions | NormalizePreset | None = None,
+    options: NormalizeOptions | NormalizePreset | dict[str, str] | None = None,
     *,
     preset: NormalizePreset | None = None,
+    vocabulary: dict[str, str] | None = None,
 ) -> str:
     """Normalize text with either an options object or a preset."""
-    selected = _selection(options, preset)
+    selected = _with_vocabulary(_selection(options, preset), vocabulary)
     if selected is None:
         return _native_normalize_ukrainian(text)
     if isinstance(selected, NormalizePreset):
@@ -201,12 +228,13 @@ def normalize_ukrainian(
 
 def normalize_ukrainian_many(
     texts: Iterable[str],
-    options: NormalizeOptions | NormalizePreset | None = None,
+    options: NormalizeOptions | NormalizePreset | dict[str, str] | None = None,
     *,
     preset: NormalizePreset | None = None,
+    vocabulary: dict[str, str] | None = None,
 ) -> list[str]:
     """Normalize an iterable of strings using one options snapshot for the batch."""
-    selected = _selection(options, preset)
+    selected = _with_vocabulary(_selection(options, preset), vocabulary)
     if selected is None:
         return _native_normalize_ukrainian_many(texts)
     if isinstance(selected, NormalizePreset):
@@ -216,12 +244,13 @@ def normalize_ukrainian_many(
 
 def flag_uncertain(
     text: str,
-    options: NormalizeOptions | NormalizePreset | None = None,
+    options: NormalizeOptions | NormalizePreset | dict[str, str] | None = None,
     *,
     preset: NormalizePreset | None = None,
+    vocabulary: dict[str, str] | None = None,
 ) -> list[UncertainSpan]:
     """Find uncertain spans; explicit options suppress resolved ambiguity warnings."""
-    selected = _selection(options, preset)
+    selected = _with_vocabulary(_selection(options, preset), vocabulary)
     if selected is None:
         return _native_flag_uncertain(text)
     if isinstance(selected, NormalizePreset):

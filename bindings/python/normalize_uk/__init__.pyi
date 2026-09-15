@@ -95,15 +95,35 @@ def cyrilize(text: str) -> str: ...
 def cyrrilize(text: str) -> str: ...
 @overload
 def normalize_ukrainian(
-    text: str, options: NormalizeOptions | None = None, *, preset: None = None
+    text: str,
+    options: NormalizeOptions | None = None,
+    *,
+    preset: None = None,
+    vocabulary: dict[str, str] | None = None,
 ) -> str: ...
 @overload
 def normalize_ukrainian(
-    text: str, options: NormalizePreset, *, preset: None = None
+    text: str,
+    options: NormalizePreset,
+    *,
+    preset: None = None,
+    vocabulary: dict[str, str] | None = None,
 ) -> str: ...
 @overload
 def normalize_ukrainian(
-    text: str, options: None = None, *, preset: NormalizePreset
+    text: str,
+    options: None = None,
+    *,
+    preset: NormalizePreset,
+    vocabulary: dict[str, str] | None = None,
+) -> str: ...
+@overload
+def normalize_ukrainian(
+    text: str,
+    options: dict[str, str],
+    *,
+    preset: None = None,
+    vocabulary: dict[str, str] | None = None,
 ) -> str: ...
 def normalize_ukrainian_with_preset(
     text: str, preset: NormalizePreset = NormalizePreset.Default
@@ -114,25 +134,62 @@ def normalize_ukrainian_many(
     options: NormalizeOptions | None = None,
     *,
     preset: None = None,
+    vocabulary: dict[str, str] | None = None,
 ) -> list[str]: ...
 @overload
 def normalize_ukrainian_many(
-    texts: Iterable[str], options: NormalizePreset, *, preset: None = None
+    texts: Iterable[str],
+    options: NormalizePreset,
+    *,
+    preset: None = None,
+    vocabulary: dict[str, str] | None = None,
 ) -> list[str]: ...
 @overload
 def normalize_ukrainian_many(
-    texts: Iterable[str], options: None = None, *, preset: NormalizePreset
+    texts: Iterable[str],
+    options: None = None,
+    *,
+    preset: NormalizePreset,
+    vocabulary: dict[str, str] | None = None,
+) -> list[str]: ...
+@overload
+def normalize_ukrainian_many(
+    texts: Iterable[str],
+    options: dict[str, str],
+    *,
+    preset: None = None,
+    vocabulary: dict[str, str] | None = None,
 ) -> list[str]: ...
 @overload
 def flag_uncertain(
-    text: str, options: NormalizeOptions | None = None, *, preset: None = None
+    text: str,
+    options: NormalizeOptions | None = None,
+    *,
+    preset: None = None,
+    vocabulary: dict[str, str] | None = None,
 ) -> list[UncertainSpan]: ...
 @overload
 def flag_uncertain(
-    text: str, options: NormalizePreset, *, preset: None = None
+    text: str,
+    options: NormalizePreset,
+    *,
+    preset: None = None,
+    vocabulary: dict[str, str] | None = None,
 ) -> list[UncertainSpan]: ...
 @overload
 def flag_uncertain(
-    text: str, options: None = None, *, preset: NormalizePreset
+    text: str,
+    options: None = None,
+    *,
+    preset: NormalizePreset,
+    vocabulary: dict[str, str] | None = None,
+) -> list[UncertainSpan]: ...
+@overload
+def flag_uncertain(
+    text: str,
+    options: dict[str, str],
+    *,
+    preset: None = None,
+    vocabulary: dict[str, str] | None = None,
 ) -> list[UncertainSpan]: ...
 def sentenize(text: str) -> list[Substring]: ...
