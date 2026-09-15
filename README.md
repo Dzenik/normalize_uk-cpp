@@ -1,5 +1,8 @@
 # normalize-uk-cpp
 
+[![CI](https://github.com/ThirdLetterC/normalize_uk-cpp/actions/workflows/ci.yml/badge.svg)](https://github.com/ThirdLetterC/normalize_uk-cpp/actions/workflows/ci.yml)
+[![Release wheels](https://github.com/ThirdLetterC/normalize_uk-cpp/actions/workflows/release-wheels.yml/badge.svg)](https://github.com/ThirdLetterC/normalize_uk-cpp/actions/workflows/release-wheels.yml)
+
 C++23 Ukrainian text normalization and tokenization utilities with optional Python 3.10+ bindings.
 
 ## CMake

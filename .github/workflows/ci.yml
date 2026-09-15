@@ -3,7 +3,25 @@ name: CI
 on:
   push:
     branches: [main]
+    paths:
+      - '**.cpp'
+      - '**.cc'
+      - '**.cxx'
+      - '**.h'
+      - '**.hpp'
+      - '**.hxx'
+      - '**.py'
+      - '**.pyi'
   pull_request:
+    paths:
+      - '**.cpp'
+      - '**.cc'
+      - '**.cxx'
+      - '**.h'
+      - '**.hpp'
+      - '**.hxx'
+      - '**.py'
+      - '**.pyi'
 
 permissions:
   contents: read
