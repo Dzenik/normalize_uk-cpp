@@ -29,6 +29,12 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `NormalizeOptions` accepts named field overrides at construction, and `normalize_ukrainian` and `flag_uncertain`
   accept explicit `options=` or `preset=` keyword arguments. Policy-aware uncertainty scanning omits ambiguity
   warnings resolved by the supplied policy while retaining invalid-value diagnostics.
+- `normalize_ukrainian_many` normalizes an iterable of Python strings with one options snapshot, preserving input
+  order and reusing results for identical strings within a batch. It accepts the same `options=` and `preset=`
+  selection as `normalize_ukrainian`.
+- `NormalizeOptions`, `Substring`, and `UncertainSpan` now support `copy.copy`, `copy.deepcopy`, and `pickle`.
+- A Python binding benchmark and regression tests cover batched normalization, value-object serialization, and
+  concurrent normalization while `NormalizeOptions` is updated.
 
 ### Fixed
 
