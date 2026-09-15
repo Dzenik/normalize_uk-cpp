@@ -1,7 +1,7 @@
 # normalize-uk-cpp
 
 [![CI](https://github.com/ThirdLetterC/normalize_uk-cpp/actions/workflows/ci.yml/badge.svg)](https://github.com/ThirdLetterC/normalize_uk-cpp/actions/workflows/ci.yml)
-[![Release wheels](https://github.com/ThirdLetterC/normalize_uk-cpp/actions/workflows/release-wheels.yml/badge.svg)](https://github.com/ThirdLetterC/normalize_uk-cpp/actions/workflows/release-wheels.yml)
+[![Release](https://github.com/ThirdLetterC/normalize_uk-cpp/actions/workflows/release.yml/badge.svg)](https://github.com/ThirdLetterC/normalize_uk-cpp/actions/workflows/release.yml)
 
 C++23 Ukrainian text normalization and tokenization utilities with optional Python 3.10+ bindings.
 
@@ -37,6 +37,15 @@ print([token.text for token in nuk.tokenize("П'ять зв'язків.")])
 ```
 
 More examples live in `examples/python/`.
+
+Tags matching the version in `pyproject.toml` (for example, `v0.4.2`) trigger
+wheel builds for supported Python versions. The workflow uploads the wheels to
+GitHub Release Assets, then downloads those Assets and publishes them to PyPI.
+To enable PyPI Trusted Publishing, register `ThirdLetterC/normalize_uk-cpp` as
+a publisher for `normalize-uk` with workflow `release.yml` and environment
+`pypi`. For a new PyPI project, register a
+[pending publisher](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/)
+first. No PyPI API token is needed.
 
 `NormalizeOptions` accepts a preset and named overrides at construction time:
 

@@ -1,4 +1,4 @@
-name: Release wheels
+name: Release
 
 on:
   push:
@@ -6,11 +6,42 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
+  verify-version:
+    name: Verify tag version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Verify tag matches package version
+        run: |
+          python - <<'PY'
+          import os
+          import pathlib
+          import tomllib
+
+          project = tomllib.loads(pathlib.Path("pyproject.toml").read_text())
+          expected_tag = "v" + project["project"]["version"]
+          actual_tag = os.environ["GITHUB_REF_NAME"]
+          if actual_tag != expected_tag:
+              raise SystemExit(f"Expected tag {expected_tag}, got {actual_tag}")
+          PY
+
   build-wheels:
     name: Build wheels on ${{ matrix.os }}
+    needs: verify-version
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -54,6 +85,8 @@ jobs:
     name: Upload wheels to release
     needs: build-wheels
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Download wheel artifacts
@@ -68,3 +101,26 @@ jobs:
         with:
           files: dist/*.whl
           fail_on_unmatched_files: true
+
+  publish-pypi:
+    name: Publish release wheels to PyPI
+    needs: release
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/normalize-uk/
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Download published release wheels
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern '*.whl' --dir dist
+          ls dist/*.whl
+
+      - name: Publish wheels to PyPI
+        uses: pypa/gh-action-pypi-publish@v1.14.2
