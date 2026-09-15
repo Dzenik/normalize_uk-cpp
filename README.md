@@ -123,16 +123,33 @@ The CLI exposes the same controls through `--colon-style`, `--date-order`, and
 
 ## Benchmarks and fuzzing
 
-Build and run the benchmark explicitly:
+Build and run the native benchmark in Release mode:
 
 ```sh
-cmake --build build --target uktextnorm_benchmark
-./build/uktextnorm_benchmark .
+cmake -S . -B build-bench-release -DCMAKE_BUILD_TYPE=Release
+cmake --build build-bench-release --target uktextnorm_benchmark --parallel
+./build-bench-release/uktextnorm_benchmark . --no-per-case --preset Default --target-bytes 262144
 ```
 
 For Python binding timings, install the package and run
 `python benchmarks/python_binding_benchmark.py`. It compares scalar and batched
 normalization, including unique inputs, and span-returning calls.
+
+Measured on 2026-09-15 with an Intel Core i9-9900K (Linux, GCC 13.3 Release
+build with `-O3`, Python 3.14.7). These are medians of three native runs or the
+Python benchmark's three `timeit` repeats:
+
+| Benchmark | Measured speed |
+| --- | ---: |
+| C++ `Default`: 27-case corpus, 1,900 UTF-8 bytes per pass | 271 normalizations/s; 18.6 KiB/s |
+| Python scalar: 1,000 short strings (4 unique) | 1.04 s per 1,000 strings |
+| Python batch: same 1,000 short strings | 4.36 ms per 1,000 strings (238× faster) |
+| Python scalar: 100 unique strings | 104.7 ms per 100 strings |
+| Python batch: same 100 unique strings | 102.4 ms per 100 strings |
+
+The C++ run processed 260,300 input bytes across 137 corpus passes. Batch
+normalization reuses results for repeated strings; unique inputs show little
+speed difference. Timings vary with hardware, build settings, and input text.
 
 With Clang and libFuzzer support, build the normalization harness with sanitizers:
 
